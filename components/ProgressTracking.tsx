@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { User, Course, LearnerProgress, CourseStatus, SyncStatus } from '../types';
+import { User, Course, LearnerProgress, CourseStatus, SyncStatus, Department, formatDepartmentLabel } from '../types';
 import { Search, Filter, RefreshCw } from 'lucide-react';
 import {
   getLearnerCourseTrackingById,
@@ -623,9 +623,11 @@ export const ProgressTracking: React.FC<ProgressTrackingProps> = ({ users, cours
                 onChange={e => setFilterDept(e.target.value)}
              >
                 <option value="All">All Departments</option>
-                <option value="Engineering">Engineering</option>
-                <option value="Sales">Sales</option>
-                <option value="HR">HR</option>
+                {Object.values(Department).map((d) => (
+                  <option key={d} value={d}>
+                    {formatDepartmentLabel(d)}
+                  </option>
+                ))}
              </select>
            </div>
            <div className="relative">
@@ -739,7 +741,11 @@ export const ProgressTracking: React.FC<ProgressTrackingProps> = ({ users, cours
                 <tr key={item.id} className="hover:bg-slate-50/50">
                   <td className="px-6 py-3">
                     <div className="font-medium text-slate-900">{item.userName}</div>
-                    <div className="text-xs text-slate-500">{item.userDept}</div>
+                    <div className="text-xs text-slate-500">
+                      {item.userDept
+                        ? formatDepartmentLabel(String(item.userDept))
+                        : "—"}
+                    </div>
                   </td>
                   <td className="px-6 py-3 text-slate-700">{item.courseTitle}</td>
                   <td className="px-6 py-3">

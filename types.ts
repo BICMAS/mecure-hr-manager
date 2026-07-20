@@ -6,12 +6,27 @@ export enum UserRole {
 }
 
 export enum Department {
-  ENGINEERING = 'Engineering',
-  SALES = 'Sales',
   HR = 'HR',
-  MARKETING = 'Marketing',
-  OPERATIONS = 'Operations',
+  SALES = 'SALES',
+  FIELD_SALES_REF = 'FIELD_SALES_REF',
+  FIELD_TEAM_MANAGER = 'FIELD_TEAM_MANAGER',
+  MEDICAL_REP = 'MEDICAL_REP',
+  MEDICAL_REP_PHARMACIST = 'MEDICAL_REP_PHARMACIST',
+  MARKETING = 'MARKETING',
+  FINANCE = 'FINANCE',
+  OPERATIONS = 'OPERATIONS',
+  IT = 'IT',
+  CUSTOMER_SUPPORT = 'CUSTOMER_SUPPORT',
+  LEGAL = 'LEGAL',
+  ADMINISTRATION = 'ADMINISTRATION',
 }
+
+/** Human-readable label for a Department enum value. */
+export const formatDepartmentLabel = (value: string): string =>
+  value
+    .split('_')
+    .map((word) => word.charAt(0) + word.slice(1).toLowerCase())
+    .join(' ');
 
 export enum CourseStatus {
   NOT_STARTED = 'Not Started',
@@ -29,7 +44,7 @@ export enum SyncStatus {
 export interface User {
   id: string;
   name: string;
-  email: string;
+  email?: string;
   role: UserRole;
   department: Department;
   group?: string;

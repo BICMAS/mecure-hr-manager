@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { User, UserRole, Department } from "../types";
+import { User, UserRole, Department, formatDepartmentLabel } from "../types";
 import {
   Plus,
   Upload,
@@ -15,7 +15,7 @@ import {
   X,
 } from "lucide-react";
 import { getAccessToken } from "@/utils/auth";
-import { mapFormToHrCreatePayload } from "@/utils/hrUserMappers";
+import { mapFormToHrCreatePayload, mapFormToHrUpdatePayload } from "@/utils/hrUserMappers";
 
 
 import { getApiV1BaseUrl } from "@/lib/apiConfig";
@@ -49,6 +49,7 @@ const normalizeUser = (u: any): User => ({
   id: u.id,
   name: u.name ?? u.fullName ?? "",
   email: u.email ?? "",
+  phoneNumber: u.phoneNumber ?? "",
   role: u.role ?? u.userRole,
   department: u.department ?? "",
   group: u.group ?? "General",
@@ -59,6 +60,9 @@ const normalizeUser = (u: any): User => ({
     )}&background=random`,
   points: u.points ?? 0,
 });
+
+const userContactLabel = (user: User) =>
+  user.email?.trim() || user.phoneNumber?.trim() || "—";
 
 const createUserByHr = async (formData: Partial<User>) => {
   const payload = mapFormToHrCreatePayload(formData);
@@ -76,13 +80,14 @@ export const UserManagement: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
 
   // User Form State
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState<Partial<User>>({
     role: UserRole.LEARNER,
-    department: Department.ENGINEERING,
+    department: Department.FIELD_SALES_REF,
     group: "General",
     password: "",
     phoneNumber: "",
@@ -108,12 +113,15 @@ export const UserManagement: React.FC = () => {
   // Delete State
   const [userToDelete, setUserToDelete] = useState<string | null>(null);
 
-  const filteredUsers = users.filter(
-    (user) =>
-      user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.department.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredUsers = users.filter((user) => {
+    const term = searchTerm.toLowerCase();
+    return (
+      user.name.toLowerCase().includes(term) ||
+      (user.email ?? "").toLowerCase().includes(term) ||
+      (user.phoneNumber ?? "").toLowerCase().includes(term) ||
+      user.department.toLowerCase().includes(term)
+    );
+  });
 
   const generatePassword = () => {
     const chars =
@@ -127,11 +135,14 @@ export const UserManagement: React.FC = () => {
 
   const handleOpenCreate = () => {
     setEditingId(null);
+    setFormError(null);
     setFormData({
       role: UserRole.LEARNER,
-      department: Department.ENGINEERING,
+      department: Department.FIELD_SALES_REF,
       group: "General",
       password: "",
+      phoneNumber: "",
+      email: "",
     });
     generatePassword(); // Auto-generate on open
     setIsModalOpen(true);
@@ -140,6 +151,7 @@ export const UserManagement: React.FC = () => {
 
   const handleOpenEdit = (user: User) => {
     setEditingId(user.id);
+    setFormError(null);
     setFormData({ ...user, password: user.password || "" }); // Populate if available, else blank
     setIsModalOpen(true);
     setShowPassword(false);
@@ -166,27 +178,41 @@ export const UserManagement: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name || !formData.email) return;
+    setFormError(null);
+
+    const hasEmail = Boolean(formData.email?.trim());
+    const hasPhone = Boolean(formData.phoneNumber?.trim());
+
+    if (!formData.name?.trim()) {
+      setFormError("Full name is required.");
+      return;
+    }
+
+    if (!hasEmail && !hasPhone) {
+      setFormError("Provide an email address and/or phone number.");
+      return;
+    }
 
     try {
       if (editingId) {
-        // UPDATE (unchanged unless backend also has HR-specific update rules)
         const updated = await authFetch(`/users/${editingId}`, {
-          method: "PATCH",
-          body: JSON.stringify(formData),
+          method: "PUT",
+          body: JSON.stringify(mapFormToHrUpdatePayload(formData)),
         });
 
-        setUsers((prev) => prev.map((u) => (u.id === editingId ? normalizeUser(updated) : u)));
+        setUsers((prev) =>
+          prev.map((u) => (u.id === editingId ? normalizeUser(updated) : u)),
+        );
       } else {
-        // ✅ HR CREATE (correct payload)
         const created = await createUserByHr(formData);
 
         setUsers((prev) => [normalizeUser(created), ...prev]);
       }
 
       setIsModalOpen(false);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to save user", err);
+      setFormError(err.message || "Failed to save user");
     }
   };
 
@@ -255,7 +281,9 @@ export const UserManagement: React.FC = () => {
                     <div className="font-medium text-slate-900">
                       {user.name}
                     </div>
-                    <div className="text-slate-500 text-xs">{user.email}</div>
+                    <div className="text-slate-500 text-xs">
+                      {userContactLabel(user)}
+                    </div>
                   </div>
                 </td>
                 <td className="px-6 py-3">
@@ -271,7 +299,9 @@ export const UserManagement: React.FC = () => {
                     {user.role}
                   </span>
                 </td>
-                <td className="px-6 py-3 text-slate-600">{user.department}</td>
+                <td className="px-6 py-3 text-slate-600">
+                  {formatDepartmentLabel(String(user.department))}
+                </td>
                 <td className="px-6 py-3 text-slate-500">{user.group}</td>
                 <td className="px-6 py-3 text-right">
                   <div className="flex justify-end gap-2">
@@ -305,6 +335,11 @@ export const UserManagement: React.FC = () => {
               {editingId ? "Edit User" : "Create New User"}
             </h3>
             <form onSubmit={handleSubmit} className="space-y-4">
+              {formError && (
+                <div className="bg-red-50 text-red-700 text-sm p-3 rounded border border-red-100">
+                  {formError}
+                </div>
+              )}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
                   Full Name
@@ -319,18 +354,21 @@ export const UserManagement: React.FC = () => {
                   }
                 />
               </div>
+              <p className="text-xs text-slate-500 -mt-2">
+                Provide an email address and/or phone number.
+              </p>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
                   Email
                 </label>
                 <input
-                  required
                   type="email"
                   className="w-full border p-2 rounded focus:ring-2 focus:ring-brand-primary"
                   value={formData.email || ""}
                   onChange={(e) =>
                     setFormData({ ...formData, email: e.target.value })
                   }
+                  placeholder="email@example.com"
                 />
               </div>
 
@@ -387,12 +425,13 @@ export const UserManagement: React.FC = () => {
                   Phone Number
                 </label>
                 <input
-                  type="text"
-                  className="w-full border p-2 rounded"
+                  type="tel"
+                  className="w-full border p-2 rounded focus:ring-2 focus:ring-brand-primary"
                   value={formData.phoneNumber || ""}
                   onChange={(e) =>
                     setFormData({ ...formData, phoneNumber: e.target.value })
                   }
+                  placeholder="123-456-7890"
                 />
               </div>
 
@@ -413,7 +452,7 @@ export const UserManagement: React.FC = () => {
                   >
                     {Object.values(Department).map((d) => (
                       <option key={d} value={d}>
-                        {d}
+                        {formatDepartmentLabel(d)}
                       </option>
                     ))}
                   </select>
@@ -483,8 +522,8 @@ export const UserManagement: React.FC = () => {
               Bulk User Upload
             </h3>
             <p className="text-sm text-slate-500 mb-6">
-              Upload a CSV file containing user details (Name, Email, Role,
-              Department).
+              Upload a CSV file containing user details (Name, Email and/or
+              Phone, Role, Department).
             </p>
 
             <div className="border-2 border-dashed border-slate-300 rounded-lg p-8 flex flex-col items-center justify-center text-center bg-slate-50 hover:bg-slate-100 transition cursor-pointer">
