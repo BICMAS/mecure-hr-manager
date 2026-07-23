@@ -8,10 +8,6 @@ export enum UserRole {
 export enum Department {
   HR = 'HR',
   SALES = 'SALES',
-  FIELD_SALES_REF = 'FIELD_SALES_REF',
-  FIELD_TEAM_MANAGER = 'FIELD_TEAM_MANAGER',
-  MEDICAL_REP = 'MEDICAL_REP',
-  MEDICAL_REP_PHARMACIST = 'MEDICAL_REP_PHARMACIST',
   MARKETING = 'MARKETING',
   FINANCE = 'FINANCE',
   OPERATIONS = 'OPERATIONS',
@@ -47,6 +43,7 @@ export interface User {
   email?: string;
   role: UserRole;
   department: Department;
+  designation?: string;
   group?: string;
   avatarUrl: string;
   password?: string; // Optional for display during creation/editing

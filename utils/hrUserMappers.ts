@@ -14,6 +14,7 @@ export const mapFormToHrCreatePayload = (formData: Partial<User>) => {
     email: normalizeOptionalContact(formData.email),
     userRole: normalizeEnum(formData.role),
     department: normalizeEnum(formData.department),
+    designation: normalizeOptionalContact(formData.designation),
     phoneNumber: normalizeOptionalContact(formData.phoneNumber),
     group: formData.group || "General",
     password: formData.password,
@@ -27,6 +28,7 @@ export const mapFormToHrUpdatePayload = (formData: Partial<User>) => {
     phoneNumber: normalizeOptionalContact(formData.phoneNumber),
     userRole: normalizeEnum(formData.role),
     department: normalizeEnum(formData.department),
+    designation: normalizeOptionalContact(formData.designation),
     group: formData.group || "General",
   };
 

@@ -52,6 +52,7 @@ const normalizeUser = (u: any): User => ({
   phoneNumber: u.phoneNumber ?? "",
   role: u.role ?? u.userRole,
   department: u.department ?? "",
+  designation: u.designation ?? "",
   group: u.group ?? "General",
   avatarUrl:
     u.avatarUrl ||
@@ -87,7 +88,7 @@ export const UserManagement: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState<Partial<User>>({
     role: UserRole.LEARNER,
-    department: Department.FIELD_SALES_REF,
+    department: Department.SALES,
     group: "General",
     password: "",
     phoneNumber: "",
@@ -119,6 +120,7 @@ export const UserManagement: React.FC = () => {
       user.name.toLowerCase().includes(term) ||
       (user.email ?? "").toLowerCase().includes(term) ||
       (user.phoneNumber ?? "").toLowerCase().includes(term) ||
+      (user.designation ?? "").toLowerCase().includes(term) ||
       user.department.toLowerCase().includes(term)
     );
   });
@@ -138,7 +140,7 @@ export const UserManagement: React.FC = () => {
     setFormError(null);
     setFormData({
       role: UserRole.LEARNER,
-      department: Department.FIELD_SALES_REF,
+      department: Department.SALES,
       group: "General",
       password: "",
       phoneNumber: "",
@@ -264,6 +266,7 @@ export const UserManagement: React.FC = () => {
               <th className="px-6 py-3">Name</th>
               <th className="px-6 py-3">Role</th>
               <th className="px-6 py-3">Department</th>
+              <th className="px-6 py-3">Designation</th>
               <th className="px-6 py-3">Group</th>
               <th className="px-6 py-3 text-right">Actions</th>
             </tr>
@@ -301,6 +304,9 @@ export const UserManagement: React.FC = () => {
                 </td>
                 <td className="px-6 py-3 text-slate-600">
                   {formatDepartmentLabel(String(user.department))}
+                </td>
+                <td className="px-6 py-3 text-slate-600">
+                  {user.designation?.trim() || "—"}
                 </td>
                 <td className="px-6 py-3 text-slate-500">{user.group}</td>
                 <td className="px-6 py-3 text-right">
@@ -482,6 +488,21 @@ export const UserManagement: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Designation (Optional)
+                </label>
+                <input
+                  type="text"
+                  className="w-full border p-2 rounded focus:ring-2 focus:ring-brand-primary"
+                  value={formData.designation || ""}
+                  onChange={(e) =>
+                    setFormData({ ...formData, designation: e.target.value })
+                  }
+                  placeholder="e.g. Senior Medical Rep"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
                   Group (Optional)
                 </label>
                 <input
@@ -523,7 +544,7 @@ export const UserManagement: React.FC = () => {
             </h3>
             <p className="text-sm text-slate-500 mb-6">
               Upload a CSV file containing user details (Name, Email and/or
-              Phone, Role, Department).
+              Phone, Role, Department, Designation).
             </p>
 
             <div className="border-2 border-dashed border-slate-300 rounded-lg p-8 flex flex-col items-center justify-center text-center bg-slate-50 hover:bg-slate-100 transition cursor-pointer">
