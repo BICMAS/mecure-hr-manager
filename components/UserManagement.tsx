@@ -14,36 +14,10 @@ import {
   AlertTriangle,
   X,
 } from "lucide-react";
-import { getAccessToken } from "@/utils/auth";
+import { authFetchJson } from "@/utils/fetchWithAuth";
 import { mapFormToHrCreatePayload, mapFormToHrUpdatePayload } from "@/utils/hrUserMappers";
 
-
-import { getApiV1BaseUrl } from "@/lib/apiConfig";
-
-const API_BASE = getApiV1BaseUrl();
-
-const authFetch = async (endpoint: string, options: RequestInit = {}) => {
-  const token = getAccessToken();
-
-  if (!token) {
-    throw new Error("Not authenticated");
-  }
-  const res = await fetch(`${API_BASE}${endpoint}`, {
-    ...options,
-    headers: {
-      ...(options.headers || {}),
-      Authorization: `Bearer ${token}`,
-      "content-type": "application/json",
-    },
-  });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.message || "Request failed");
-  }
-
-  return res.json();
-};
+const DEFAULT_PAGE_SIZE = 20;
 
 const normalizeUser = (u: any): User => ({
   id: u.id,
@@ -68,7 +42,7 @@ const userContactLabel = (user: User) =>
 const createUserByHr = async (formData: Partial<User>) => {
   const payload = mapFormToHrCreatePayload(formData);
 
-  return authFetch("/users", {
+  return authFetchJson("/users", {
     method: "POST",
     body: JSON.stringify(payload),
   });
@@ -76,6 +50,8 @@ const createUserByHr = async (formData: Partial<User>) => {
 
 export const UserManagement: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize] = useState(DEFAULT_PAGE_SIZE);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isBulkOpen, setIsBulkOpen] = useState(false);
   const [users, setUsers] = useState<User[]>([]);
@@ -98,7 +74,7 @@ export const UserManagement: React.FC = () => {
     const fetchUsers = async () => {
       try {
         setLoading(true);
-        const data = await authFetch("/users/organization/users");
+        const data = await authFetchJson<any[]>("/users/organization/users");
         setUsers(data.map(normalizeUser));
       } catch (err: any) {
         console.error(err);
@@ -110,6 +86,10 @@ export const UserManagement: React.FC = () => {
 
     fetchUsers();
   }, []);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
 
   // Delete State
   const [userToDelete, setUserToDelete] = useState<string | null>(null);
@@ -124,6 +104,19 @@ export const UserManagement: React.FC = () => {
       user.department.toLowerCase().includes(term)
     );
   });
+
+  const totalUsers = filteredUsers.length;
+  const totalPages = Math.max(1, Math.ceil(totalUsers / pageSize));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const pageStartIndex = (safeCurrentPage - 1) * pageSize;
+  const pageEndIndex = Math.min(pageStartIndex + pageSize, totalUsers);
+  const paginatedUsers = filteredUsers.slice(pageStartIndex, pageEndIndex);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
 
   const generatePassword = () => {
     const chars =
@@ -167,7 +160,7 @@ export const UserManagement: React.FC = () => {
     if (!userToDelete) return;
 
     try {
-      await authFetch(`/users/${userToDelete}`, {
+      await authFetchJson(`/users/${userToDelete}`, {
         method: "DELETE",
       });
 
@@ -197,7 +190,7 @@ export const UserManagement: React.FC = () => {
 
     try {
       if (editingId) {
-        const updated = await authFetch(`/users/${editingId}`, {
+        const updated = await authFetchJson(`/users/${editingId}`, {
           method: "PUT",
           body: JSON.stringify(mapFormToHrUpdatePayload(formData)),
         });
@@ -272,7 +265,7 @@ export const UserManagement: React.FC = () => {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {filteredUsers.map((user) => (
+            {paginatedUsers.map((user) => (
               <tr key={user.id} className="hover:bg-slate-50/50">
                 <td className="px-6 py-3 flex items-center gap-3">
                   <img
@@ -331,6 +324,43 @@ export const UserManagement: React.FC = () => {
             ))}
           </tbody>
         </table>
+
+        {!loading && !error && totalUsers > 0 && (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-6 py-4 border-t border-slate-200 bg-slate-50/80">
+            <p className="text-sm text-slate-600">
+              Showing {pageStartIndex + 1}–{pageEndIndex} of {totalUsers}
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                disabled={safeCurrentPage <= 1}
+                className="px-3 py-1.5 text-sm border border-slate-300 rounded bg-white text-slate-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50"
+              >
+                Previous
+              </button>
+              <span className="text-sm text-slate-600 min-w-[7rem] text-center">
+                Page {safeCurrentPage} of {totalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() =>
+                  setCurrentPage((page) => Math.min(totalPages, page + 1))
+                }
+                disabled={safeCurrentPage >= totalPages}
+                className="px-3 py-1.5 text-sm border border-slate-300 rounded bg-white text-slate-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
+
+        {!loading && !error && totalUsers === 0 && (
+          <div className="px-6 py-8 text-sm text-slate-500 text-center border-t border-slate-200">
+            No users match your search.
+          </div>
+        )}
       </div>
 
       {/* Add/Edit User Modal */}

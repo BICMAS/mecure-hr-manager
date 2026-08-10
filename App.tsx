@@ -19,10 +19,8 @@ import { CertificateManagement } from "./components/CertificateManagement";
 import { Login } from "./components/Login";
 
 import { getAccessToken, clearAuth } from "./utils/auth";
+import { fetchWithAuth, getTokenExpiryMs } from "./utils/fetchWithAuth";
 import { FieldTasks } from "./components/FieldTasks";
-import { getApiV1BaseUrl } from "./lib/apiConfig";
-
-const API_BASE = getApiV1BaseUrl();
 
 enum View {
   DASHBOARD,
@@ -155,15 +153,8 @@ const App: React.FC = () => {
       row.course ?? row.assignment?.course ?? row.enrollment?.course ?? null,
   });
 
-  const fetchWithAuth = async (endpoint: string) => {
-    const token = getAccessToken();
-    if (!token) throw new Error("Not authenticated");
-
-    const res = await fetch(`${API_BASE}${endpoint}`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
+  const fetchSharedData = async (endpoint: string) => {
+    const res = await fetchWithAuth(endpoint);
 
     if (!res.ok) {
       const text = await res.text();
@@ -183,14 +174,51 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    const onAuthExpired = () => {
+      clearAuth();
+      setCurrentView(View.DASHBOARD);
+      setIsSidebarOpen(false);
+      setIsAuthenticated(false);
+    };
+
+    window.addEventListener("mecure:auth-expired", onAuthExpired);
+    return () => window.removeEventListener("mecure:auth-expired", onAuthExpired);
+  }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      return;
+    }
+
+    const token = getAccessToken();
+    const expiryMs = getTokenExpiryMs(token);
+
+    if (!expiryMs) {
+      return;
+    }
+
+    const remainingMs = expiryMs - Date.now();
+    if (remainingMs <= 0) {
+      window.dispatchEvent(new Event("mecure:auth-expired"));
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      window.dispatchEvent(new Event("mecure:auth-expired"));
+    }, remainingMs);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [isAuthenticated]);
+
+  useEffect(() => {
     if (!isAuthenticated) return;
 
     const loadSharedData = async () => {
       try {
         const [usersRes, coursesRes, progressRes] = await Promise.all([
-          fetchWithAuth("/users/organization/users"),
-          fetchWithAuth("/courses"),
-          fetchWithAuth("/dashboard/hr/learners/course-tracking"),
+          fetchSharedData("/users/organization/users"),
+          fetchSharedData("/courses"),
+          fetchSharedData("/dashboard/hr/learners/course-tracking"),
         ]);
 
         const usersSource = Array.isArray(usersRes)
