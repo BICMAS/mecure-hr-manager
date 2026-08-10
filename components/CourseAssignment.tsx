@@ -1,8 +1,13 @@
 import React, { useState, useEffect } from "react";
 import { User, Course } from "../types";
-import { Calendar, Users, Book } from "lucide-react";
+import { Calendar, Users, Book, RotateCcw, AlertTriangle, X } from "lucide-react";
 import { generateCourseDescription } from "../services/geminiService";
 import { getAccessToken } from "../utils/auth";
+import {
+  getCourseById,
+  resetCourseProgress,
+  type ResetCourseProgressResult,
+} from "../api/courses";
 
 import { getApiV1BaseUrl } from "@/lib/apiConfig";
 
@@ -50,7 +55,15 @@ export const CourseAssignment: React.FC<CourseAssignmentProps> = ({
   const [users, setUsers] = useState<User[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
 
-  
+  const [resetModalOpen, setResetModalOpen] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetPreview, setResetPreview] = useState<ResetCourseProgressResult | null>(null);
+  const [deleteCertificates, setDeleteCertificates] = useState(true);
+  const [newPacingStartDate, setNewPacingStartDate] = useState("");
+  const [courseDetail, setCourseDetail] = useState<{
+    modulePacingEnabled?: boolean;
+    pacingStartDate?: string | null;
+  } | null>(null);
 
 
   /* --------------------------------
@@ -111,12 +124,136 @@ export const CourseAssignment: React.FC<CourseAssignmentProps> = ({
   --------------------------------- */
   const handleCourseSelect = async (courseId: string) => {
     setSelectedCourseId(courseId);
+    setCourseDetail(null);
+    setResetPreview(null);
     const course = courses.find((c) => c.id === courseId);
     if (!course) return;
 
     setAiDescription("Generating description…");
     const desc = await generateCourseDescription(course.title);
     setAiDescription(desc);
+
+    if (courseId) {
+      try {
+        const detail = await getCourseById(courseId);
+        setCourseDetail({
+          modulePacingEnabled: detail.modulePacingEnabled,
+          pacingStartDate: detail.pacingStartDate,
+        });
+        if (detail.pacingStartDate) {
+          const dateStr = detail.pacingStartDate.slice(0, 10);
+          setNewPacingStartDate(dateStr);
+        } else {
+          setNewPacingStartDate("");
+        }
+      } catch {
+        // Course detail optional for assignment; reset needs it at confirm time
+      }
+    }
+  };
+
+  const selectedCourse = courses.find((c) => c.id === selectedCourseId);
+
+  const openResetModal = async () => {
+    if (!selectedCourseId) return;
+    setResetModalOpen(true);
+    setResetLoading(true);
+    setResetPreview(null);
+    setError(null);
+
+    try {
+      const detail = await getCourseById(selectedCourseId);
+      setCourseDetail({
+        modulePacingEnabled: detail.modulePacingEnabled,
+        pacingStartDate: detail.pacingStartDate,
+      });
+
+      const preview = await resetCourseProgress(
+        selectedCourseId,
+        {
+          deleteCertificates,
+          resetModuleProgress: true,
+          newPacingStartDate: detail.modulePacingEnabled && newPacingStartDate
+            ? newPacingStartDate
+            : undefined,
+        },
+        true,
+      );
+      setResetPreview(preview);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to preview reset";
+      setError(message);
+      setResetModalOpen(false);
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
+  const refreshResetPreview = async () => {
+    if (!selectedCourseId || !resetModalOpen) return;
+    setResetLoading(true);
+    try {
+      const preview = await resetCourseProgress(
+        selectedCourseId,
+        {
+          deleteCertificates,
+          resetModuleProgress: true,
+          newPacingStartDate:
+            courseDetail?.modulePacingEnabled && newPacingStartDate
+              ? newPacingStartDate
+              : undefined,
+        },
+        true,
+      );
+      setResetPreview(preview);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to preview reset";
+      setError(message);
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
+  const handleConfirmReset = async () => {
+    if (!selectedCourseId) return;
+    setResetLoading(true);
+    setError(null);
+
+    try {
+      const result = await resetCourseProgress(
+        selectedCourseId,
+        {
+          deleteCertificates,
+          resetModuleProgress: true,
+          newPacingStartDate:
+            courseDetail?.modulePacingEnabled && newPacingStartDate
+              ? newPacingStartDate
+              : undefined,
+        },
+        false,
+      );
+
+      const errorNote =
+        result.errors.length > 0
+          ? ` (${result.errors.length} learner error(s))`
+          : "";
+
+      setToast(
+        `Reset complete: ${result.learnersProcessed} learner(s), ` +
+          `${result.certificatesDeleted} certificate(s) removed, ` +
+          `${result.scormAttemptsDeleted} SCORM attempt(s) cleared${errorNote}`,
+      );
+      setResetModalOpen(false);
+      setResetPreview(null);
+      setTimeout(() => setToast(null), 6000);
+
+      await onAssignmentSuccess?.();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to reset progress";
+      setError(message);
+    } finally {
+      setResetLoading(false);
+    }
   };
 
   /* --------------------------------
@@ -209,7 +346,14 @@ useEffect(() => {
   fetchCourses();
 }, []);
 
-
+  useEffect(() => {
+    if (!resetModalOpen || !selectedCourseId || !resetPreview) return;
+    const timer = setTimeout(() => {
+      refreshResetPreview();
+    }, 300);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deleteCertificates, newPacingStartDate]);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -255,6 +399,27 @@ useEffect(() => {
             onChange={(e) => setDeadline(e.target.value)}
           />
         </div>
+
+        {selectedCourseId && (
+          <div className="bg-amber-50 p-6 rounded-lg border border-amber-200 shadow-sm">
+            <h3 className="font-bold mb-2 flex items-center gap-2 text-amber-900">
+              <RotateCcw className="w-5 h-5" /> Reset learner progress
+            </h3>
+            <p className="text-xs text-amber-800 mb-3">
+              Use after Super Admin publishes an updated SCORM version. All assigned
+              learners in your organization will return to 0% / Not Started.
+              Assignments are kept.
+            </p>
+            <button
+              type="button"
+              onClick={openResetModal}
+              disabled={loading || resetLoading}
+              className="w-full py-2.5 border border-amber-400 text-amber-900 rounded-lg font-medium hover:bg-amber-100 disabled:opacity-50"
+            >
+              Reset all learner progress…
+            </button>
+          </div>
+        )}
 
         <button
           onClick={handleAssign}
@@ -325,8 +490,101 @@ useEffect(() => {
 
       {/* SUCCESS TOAST */}
       {toast && (
-        <div className="fixed bottom-6 right-6 bg-emerald-600 text-white px-5 py-3 rounded-xl shadow-lg z-50">
+        <div className="fixed bottom-6 right-6 bg-emerald-600 text-white px-5 py-3 rounded-xl shadow-lg z-50 max-w-md">
           {toast}
+        </div>
+      )}
+
+      {/* RESET PROGRESS MODAL */}
+      {resetModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+            <div className="flex items-start justify-between p-5 border-b">
+              <div>
+                <h2 className="text-lg font-bold flex items-center gap-2">
+                  <AlertTriangle className="w-5 h-5 text-amber-600" />
+                  Reset all learner progress
+                </h2>
+                <p className="text-sm text-slate-600 mt-1">
+                  {selectedCourse?.title ?? "Selected course"}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setResetModalOpen(false)}
+                className="p-1 rounded hover:bg-slate-100"
+                aria-label="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <p className="text-sm text-slate-600">
+                Run this <strong>after</strong> the updated SCORM course is published.
+                Learners will start fresh on their next launch.
+              </p>
+
+              {resetLoading && !resetPreview ? (
+                <p className="text-sm text-slate-500">Loading preview…</p>
+              ) : resetPreview ? (
+                <div className="bg-slate-50 rounded-lg p-4 text-sm space-y-1">
+                  <p>
+                    <strong>{resetPreview.learnersProcessed}</strong> learner(s) will be
+                    reset
+                  </p>
+                  <p>{resetPreview.certificatesDeleted} certificate(s) removed</p>
+                  <p>{resetPreview.scormAttemptsDeleted} SCORM attempt(s) cleared</p>
+                  <p>{resetPreview.moduleProgressReset} module progress row(s) reset</p>
+                </div>
+              ) : null}
+
+              <label className="flex items-start gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={deleteCertificates}
+                  onChange={(e) => setDeleteCertificates(e.target.checked)}
+                  className="mt-1"
+                />
+                <span className="text-sm">
+                  Remove issued certificates (required for progress to show 0%)
+                </span>
+              </label>
+
+              {courseDetail?.modulePacingEnabled && (
+                <div>
+                  <label className="block text-sm mb-1">
+                    New module pacing start date (optional)
+                  </label>
+                  <input
+                    type="date"
+                    className="w-full border p-2 rounded"
+                    value={newPacingStartDate}
+                    onChange={(e) => setNewPacingStartDate(e.target.value)}
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-3 p-5 border-t bg-slate-50 rounded-b-xl">
+              <button
+                type="button"
+                onClick={() => setResetModalOpen(false)}
+                disabled={resetLoading}
+                className="flex-1 py-2.5 border rounded-lg font-medium hover:bg-white disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmReset}
+                disabled={resetLoading || !resetPreview}
+                className="flex-1 py-2.5 bg-amber-600 text-white rounded-lg font-medium hover:bg-amber-700 disabled:bg-slate-300"
+              >
+                {resetLoading ? "Resetting…" : "Confirm reset"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
