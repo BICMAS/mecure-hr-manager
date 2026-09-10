@@ -65,4 +65,24 @@ export async function resetCourseProgress(
   return data;
 }
 
-export { API_BASE };
+export async function lockCourse(courseId: string): Promise<{ isLocked?: boolean }> {
+  const res = await fetchWithAuth(`/courses/${encodeURIComponent(courseId)}/lock`, {
+    method: 'PATCH',
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || data.message || 'Failed to lock course');
+  }
+  return data;
+}
+
+export async function unlockCourse(courseId: string): Promise<{ isLocked?: boolean }> {
+  const res = await fetchWithAuth(`/courses/${encodeURIComponent(courseId)}/unlock`, {
+    method: 'PATCH',
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || data.message || 'Failed to unlock course');
+  }
+  return data;
+}

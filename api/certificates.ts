@@ -120,6 +120,19 @@ export async function getLatestCertificateDownload() {
   return blob;
 }
 
+export async function downloadAssignedTemplatePreview() {
+  const res = await fetchWithAuth(
+    `${API_BASE}/certificates/my-assigned-template/preview-pdf`,
+  );
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || "Failed to download certificate preview");
+  }
+
+  const blob = await res.blob();
+  return blob;
+}
+
 export async function getCertificateDownloadById(certificateId: string) {
   const res = await fetchWithAuth(
     `${API_BASE}/certificates/${certificateId}/download`,

@@ -1,11 +1,13 @@
 
 import React, { useEffect, useState } from 'react';
 import { User, Course, Certificate, CertificateTemplate } from '../types';
-import { Download, RotateCcw, Award, Layout } from 'lucide-react';
+import { Download, RotateCcw, Award, Layout, Eye, X } from 'lucide-react';
+import { OrgCertificatePreview, parseAssignedTemplateDisplay } from './OrgCertificatePreview';
 import { getAccessToken } from '../utils/auth';
 import {
   assignCertificateTemplate,
   getAssignedTemplateForCourse,
+  downloadAssignedTemplatePreview,
   getCertificateDownloadById,
   getLatestCertificateDownload,
   getMyAssignedTemplate,
@@ -33,6 +35,9 @@ export const CertificateManagement: React.FC<CertificateManagementProps> = ({ us
   const [fetchedUsers, setFetchedUsers] = useState<User[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [myAssignedTemplate, setMyAssignedTemplate] = useState<CertificateTemplate | null>(null);
+  const [orgTemplateStatus, setOrgTemplateStatus] = useState<'loading' | 'assigned' | 'none'>('loading');
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [downloadingTemplate, setDownloadingTemplate] = useState(false);
   const [selectedIssueUserId, setSelectedIssueUserId] = useState('');
   const [selectedIssueCourseId, setSelectedIssueCourseId] = useState('');
   const [issuingCertificate, setIssuingCertificate] = useState(false);
@@ -43,6 +48,12 @@ export const CertificateManagement: React.FC<CertificateManagementProps> = ({ us
     title: course.title,
     description: course.description ?? "",
     status: course.status,
+    category:
+      typeof course.category === "string"
+        ? course.category
+        : course.category?.name ?? "",
+    certificateTemplateId:
+      course.certificateTemplateId ?? course.certificateTemplate?.id ?? null,
   }));
 
   const availableCourses =
@@ -119,20 +130,45 @@ export const CertificateManagement: React.FC<CertificateManagementProps> = ({ us
         console.log("GET /api/v1/certificates/my-assigned-template response:", assigned);
 
         const tpl = assigned?.template ?? assigned;
-        if (!tpl?.id) return;
+        if (!tpl?.id) {
+          setOrgTemplateStatus("none");
+          return;
+        }
+
+        const httpUrl = (value?: string) =>
+          typeof value === "string" && /^https?:\/\//i.test(value.trim())
+            ? value.trim()
+            : "";
+
+        const display = parseAssignedTemplateDisplay(tpl);
+        const logoUrl =
+          httpUrl(tpl.previewUrl) ||
+          httpUrl(tpl.url) ||
+          httpUrl(tpl.blobUrl);
 
         const mappedTemplate: CertificateTemplate = {
           id: tpl.id,
-          name: tpl.filename ?? "Assigned Template",
-          previewUrl: tpl.blobUrl ?? "",
+          name: display.title || tpl.filename || "Organization template",
+          previewUrl: logoUrl,
           uploadDate: tpl.createdAt
             ? new Date(tpl.createdAt).toISOString().split("T")[0]
             : new Date().toISOString().split("T")[0],
-          description: tpl.description ?? "",
-          templateUrl: tpl.blobUrl ?? "",
+          description: display.description,
+          templateUrl: logoUrl,
+          title: display.title,
+          theme: display.theme,
+          signatory: display.signatory,
+          signatoryRole: display.signatoryRole,
+          signatory2: display.signatory2,
+          signatoryRole2: display.signatoryRole2,
+          signatorySignatureUrl:
+            display.signatorySignatureUrl || httpUrl(tpl.signatorySignatureUrl),
+          signatory2SignatureUrl:
+            display.signatory2SignatureUrl || httpUrl(tpl.signatory2SignatureUrl),
         };
 
         setMyAssignedTemplate(mappedTemplate);
+        setOrgTemplateStatus("assigned");
         setTemplates((prev) => {
           const exists = prev.some((template) => template.id === mappedTemplate.id);
           if (exists) return prev;
@@ -141,6 +177,8 @@ export const CertificateManagement: React.FC<CertificateManagementProps> = ({ us
       } catch (err) {
         // 404 is expected when HR has no template yet.
         console.warn("No assigned HR template yet:", err);
+        setMyAssignedTemplate(null);
+        setOrgTemplateStatus("none");
       }
     };
 
@@ -170,6 +208,12 @@ export const CertificateManagement: React.FC<CertificateManagementProps> = ({ us
           title: course.title,
           description: course.description ?? "",
           status: course.status ?? "",
+          category:
+            typeof course.category === "string"
+              ? course.category
+              : course.category?.name ?? "",
+          certificateTemplateId:
+            course.certificateTemplateId ?? course.certificateTemplate?.id ?? null,
         }));
         setFetchedCourses(mapped);
         console.log("Certificates fallback courses response:", mapped);
@@ -197,15 +241,18 @@ export const CertificateManagement: React.FC<CertificateManagementProps> = ({ us
       );
 
       const mappings: Record<string, string> = {};
+      availableCourses.forEach((course) => {
+        if (course.certificateTemplateId) {
+          mappings[course.id] = course.certificateTemplateId;
+        }
+      });
       settled.forEach((result) => {
         if (result.status === "fulfilled" && result.value.templateId) {
           mappings[result.value.courseId] = result.value.templateId;
         }
       });
 
-      if (Object.keys(mappings).length > 0) {
-        setCourseMappings((prev) => ({ ...prev, ...mappings }));
-      }
+      setCourseMappings(mappings);
     };
 
     fetchCourseTemplateAssignments();
@@ -220,6 +267,24 @@ export const CertificateManagement: React.FC<CertificateManagementProps> = ({ us
     anchor.click();
     anchor.remove();
     URL.revokeObjectURL(href);
+  };
+
+  const handleDownloadTemplate = async () => {
+    try {
+      setDownloadingTemplate(true);
+      const blob = await downloadAssignedTemplatePreview();
+      triggerBrowserDownload(blob, "mecure-certificate-preview.pdf");
+    } catch (err) {
+      console.error("Organization certificate preview download error:", err);
+      alert(err instanceof Error ? err.message : "Failed to download certificate preview");
+    } finally {
+      setDownloadingTemplate(false);
+    }
+  };
+
+  const handlePreviewTemplate = () => {
+    if (!myAssignedTemplate) return;
+    setPreviewOpen(true);
   };
 
   const handleDownloadLatest = async () => {
@@ -448,43 +513,65 @@ export const CertificateManagement: React.FC<CertificateManagementProps> = ({ us
                 </div>
             ) : (
                 <div className="p-6 space-y-8">
-                    {/* Templates Grid */}
                     <div className="space-y-4">
                         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                            <h3 className="text-lg font-bold text-slate-900">Available Templates</h3>
+                            <h3 className="text-lg font-bold text-slate-900">Organization template</h3>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {templates.map(t => (
-                                <div key={t.id} className="border border-slate-200 rounded-lg overflow-hidden group hover:shadow-md transition">
-                                    <div className="h-40 bg-slate-100 overflow-hidden relative flex items-center justify-center">
-                                      {t.previewUrl?.toLowerCase().endsWith('.pdf') ? (
-                                        <div className="px-4 text-center">
-                                          <p className="text-sm font-semibold text-slate-700">{t.name}</p>
-                                          <p className="text-[11px] text-slate-500 mt-1">PDF template</p>
-                                        </div>
-                                      ) : (
-                                        <img
-                                          src={t.previewUrl}
-                                          alt={t.name}
-                                          className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition"
-                                        />
-                                      )}
-                                    </div>
-                                    <div className="p-4 bg-white">
-                                        <div className="flex items-start justify-between gap-2">
-                                          <h4 className="font-semibold text-slate-800">{t.name}</h4>
-                                          <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
-                                            Backend template
-                                          </span>
-                                        </div>
-                                        <p className="text-xs text-slate-500 mt-1">Uploaded: {t.uploadDate}</p>
-                                        {t.description && (
-                                          <p className="text-xs text-slate-500 mt-1 truncate">{t.description}</p>
-                                        )}
-                                    </div>
+
+                        {orgTemplateStatus === "loading" && (
+                          <div className="border border-slate-200 rounded-xl p-6 text-sm text-slate-500">
+                            Loading organization template...
+                          </div>
+                        )}
+
+                        {orgTemplateStatus === "none" && (
+                          <div className="border border-dashed border-slate-300 rounded-xl bg-slate-50 p-8 text-center">
+                            <p className="text-sm font-medium text-slate-700">
+                              No certificate template assigned to your organization.
+                            </p>
+                            <p className="text-xs text-slate-500 mt-2">
+                              Ask a Super Admin to assign a certificate template to your organization.
+                            </p>
+                          </div>
+                        )}
+
+                        {orgTemplateStatus === "assigned" && myAssignedTemplate && (
+                          <div className="max-w-[780px] border border-brand-primary/20 rounded-xl overflow-hidden bg-white shadow-sm">
+                            <OrgCertificatePreview template={myAssignedTemplate} compact />
+                            <div className="p-5 space-y-3 border-t border-slate-100">
+                              <div className="flex items-start justify-between gap-2">
+                                <div>
+                                  <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-primary">
+                                    Organization template
+                                  </p>
+                                  <h4 className="font-semibold text-slate-900 mt-1">{myAssignedTemplate.name}</h4>
                                 </div>
-                            ))}
-                        </div>
+                              </div>
+                              {myAssignedTemplate.description && (
+                                <p className="text-sm text-slate-600">{myAssignedTemplate.description}</p>
+                              )}
+                              <p className="text-xs text-slate-500">Assigned: {myAssignedTemplate.uploadDate}</p>
+                              <div className="flex flex-wrap gap-2 pt-1">
+                                <button
+                                  type="button"
+                                  onClick={handlePreviewTemplate}
+                                  className="text-slate-600 hover:text-brand-primary flex items-center gap-1 text-xs font-medium border border-slate-200 rounded px-3 py-2"
+                                >
+                                  <Eye className="w-3 h-3" /> Preview
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={handleDownloadTemplate}
+                                  disabled={downloadingTemplate}
+                                  className="text-slate-600 hover:text-brand-primary flex items-center gap-1 text-xs font-medium border border-slate-200 rounded px-3 py-2 disabled:opacity-60"
+                                >
+                                  <Download className="w-3 h-3" />
+                                  {downloadingTemplate ? "Downloading..." : "Download"}
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                     </div>
 
                     {/* Course Mapping Table */}
@@ -503,7 +590,7 @@ export const CertificateManagement: React.FC<CertificateManagementProps> = ({ us
                                     {availableCourses.map(course => (
                                         <tr key={course.id}>
                                             <td className="px-6 py-3 font-medium text-slate-900">{course.title}</td>
-                                            <td className="px-6 py-3 text-slate-500">{(course as any).category ?? "-"}</td>
+                                            <td className="px-6 py-3 text-slate-500">{course.category || "-"}</td>
                                             <td className="px-6 py-3">
                                                 <div className="relative w-64">
                                                     <select 
@@ -548,6 +635,50 @@ export const CertificateManagement: React.FC<CertificateManagementProps> = ({ us
                 </div>
             )}
         </div>
+        {previewOpen && myAssignedTemplate && (
+          <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl shadow-xl max-w-[820px] w-full overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200">
+                <h4 className="text-sm font-semibold text-slate-900">
+                  {myAssignedTemplate.name}
+                </h4>
+                <button
+                  type="button"
+                  onClick={() => setPreviewOpen(false)}
+                  className="p-1 rounded hover:bg-slate-100 text-slate-500"
+                  aria-label="Close preview"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="bg-slate-100 p-4 max-h-[75vh] overflow-auto">
+                <div className="w-[760px] max-w-full mx-auto border border-slate-200 rounded-lg overflow-hidden shadow-sm">
+                  <OrgCertificatePreview template={myAssignedTemplate} />
+                </div>
+              </div>
+              <div className="flex justify-end gap-2 px-4 py-3 border-t border-slate-200">
+                {myAssignedTemplate.previewUrl && (
+                  <a
+                    href={myAssignedTemplate.previewUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs font-medium text-slate-600 border border-slate-200 rounded px-3 py-2 hover:text-brand-primary"
+                  >
+                    Open logo
+                  </a>
+                )}
+                <button
+                  type="button"
+                  onClick={handleDownloadTemplate}
+                  disabled={downloadingTemplate}
+                  className="text-xs font-medium text-white bg-slate-900 rounded px-3 py-2 disabled:opacity-60"
+                >
+                  {downloadingTemplate ? "Downloading..." : "Download"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
     </div>
   );
 };

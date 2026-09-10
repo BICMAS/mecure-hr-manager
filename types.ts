@@ -56,6 +56,9 @@ export interface Course {
   title: string;
   description: string;
   status: string;
+  category?: string;
+  certificateTemplateId?: string | null;
+  isLocked?: boolean;
 }
 
 export interface CourseHint {
@@ -99,4 +102,12 @@ export interface CertificateTemplate {
   uploadDate: string;
   description?: string;
   templateUrl?: string;
+  title?: string;
+  theme?: string;
+  signatory?: string;
+  signatoryRole?: string;
+  signatory2?: string;
+  signatoryRole2?: string;
+  signatorySignatureUrl?: string;
+  signatory2SignatureUrl?: string;
 }

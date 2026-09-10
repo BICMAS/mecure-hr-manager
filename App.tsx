@@ -59,12 +59,25 @@ const App: React.FC = () => {
       )}&background=random`,
   });
 
+  const categoryLabel = (category: unknown): string => {
+    if (!category) return "";
+    if (typeof category === "string") return category;
+    if (typeof category === "object" && category !== null && "name" in category) {
+      const name = (category as { name?: unknown }).name;
+      return typeof name === "string" ? name : "";
+    }
+    return "";
+  };
+
   const normalizeCourse = (course: any) => ({
     id: course.id,
     title: course.title ?? course.courseTitle ?? course.name ?? "",
     description: course.description ?? "",
     status: course.status ?? "",
-    category: course.category ?? "",
+    category: categoryLabel(course.category),
+    certificateTemplateId:
+      course.certificateTemplateId ?? course.certificateTemplate?.id ?? null,
+    isLocked: Boolean(course.isLocked),
   });
 
   const normalizeProgress = (row: any) => ({

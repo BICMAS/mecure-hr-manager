@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from "react";
 import { User, Course } from "../types";
-import { Calendar, Users, Book, RotateCcw, AlertTriangle, X } from "lucide-react";
+import { Calendar, Users, Book, RotateCcw, AlertTriangle, X, Lock, Unlock } from "lucide-react";
 import { generateCourseDescription } from "../services/geminiService";
 import { getAccessToken } from "../utils/auth";
 import {
   getCourseById,
   resetCourseProgress,
+  lockCourse,
+  unlockCourse,
   type ResetCourseProgressResult,
 } from "../api/courses";
 
@@ -32,11 +34,23 @@ const normalizeUser = (u: any): User => ({
   points: u.points ?? 0,
 });
 
+function categoryLabel(category: unknown): string {
+  if (!category) return "";
+  if (typeof category === "string") return category;
+  if (typeof category === "object" && category !== null && "name" in category) {
+    const name = (category as { name?: unknown }).name;
+    return typeof name === "string" ? name : "";
+  }
+  return "";
+}
+
 const normalizeCourse = (c: any): Course => ({
   id: c.id,
   title: c.title,
   description: c.description ?? "",
   status: c.status,
+  category: categoryLabel(c.category),
+  isLocked: Boolean(c.isLocked),
 });
 
 
@@ -64,6 +78,8 @@ export const CourseAssignment: React.FC<CourseAssignmentProps> = ({
     modulePacingEnabled?: boolean;
     pacingStartDate?: string | null;
   } | null>(null);
+  const [lockConfirmCourse, setLockConfirmCourse] = useState<Course | null>(null);
+  const [lockingCourseId, setLockingCourseId] = useState<string | null>(null);
 
 
   /* --------------------------------
@@ -211,6 +227,40 @@ export const CourseAssignment: React.FC<CourseAssignmentProps> = ({
       setError(message);
     } finally {
       setResetLoading(false);
+    }
+  };
+
+  const applyCourseLockState = (courseId: string, isLocked: boolean) => {
+    setCourses((prev) =>
+      prev.map((course) => (course.id === courseId ? { ...course, isLocked } : course)),
+    );
+  };
+
+  const handleUnlockCourse = async (course: Course) => {
+    try {
+      setLockingCourseId(course.id);
+      await unlockCourse(course.id);
+      applyCourseLockState(course.id, false);
+      setToast(`${course.title} unlocked`);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to unlock course");
+    } finally {
+      setLockingCourseId(null);
+    }
+  };
+
+  const handleConfirmLockCourse = async () => {
+    if (!lockConfirmCourse) return;
+    try {
+      setLockingCourseId(lockConfirmCourse.id);
+      await lockCourse(lockConfirmCourse.id);
+      applyCourseLockState(lockConfirmCourse.id, true);
+      setToast(`${lockConfirmCourse.title} locked`);
+      setLockConfirmCourse(null);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to lock course");
+    } finally {
+      setLockingCourseId(null);
     }
   };
 
@@ -373,10 +423,52 @@ useEffect(() => {
             <option value="">-- Choose Course --</option>
             {courses.map((c) => (
               <option key={c.id} value={c.id}>
-                {c.title}
+                {c.category ? `${c.title} (${c.category})` : c.title}
+                {c.isLocked ? " — Locked" : ""}
               </option>
             ))}
           </select>
+
+          {courses.length > 0 && (
+            <ul className="mt-4 space-y-2 max-h-56 overflow-y-auto">
+              {courses.map((course) => (
+                <li
+                  key={course.id}
+                  className="flex items-center justify-between gap-2 border border-slate-200 rounded-lg px-3 py-2"
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate">{course.title}</p>
+                    {course.isLocked && (
+                      <span className="inline-block mt-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-800 text-white">
+                        Locked
+                      </span>
+                    )}
+                  </div>
+                  {course.isLocked ? (
+                    <button
+                      type="button"
+                      onClick={() => handleUnlockCourse(course)}
+                      disabled={lockingCourseId === course.id}
+                      className="shrink-0 text-xs font-medium px-2.5 py-1.5 rounded-lg border border-emerald-200 text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+                    >
+                      <Unlock className="w-3.5 h-3.5 inline mr-1" />
+                      Unlock
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setLockConfirmCourse(course)}
+                      disabled={lockingCourseId === course.id}
+                      className="shrink-0 text-xs font-medium px-2.5 py-1.5 rounded-lg border border-amber-200 text-amber-800 hover:bg-amber-50 disabled:opacity-50"
+                    >
+                      <Lock className="w-3.5 h-3.5 inline mr-1" />
+                      Lock
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
 
           {aiDescription && (
             <div className="mt-3 text-xs bg-brand-primary/10 p-3 rounded border">
@@ -492,6 +584,42 @@ useEffect(() => {
       {toast && (
         <div className="fixed bottom-6 right-6 bg-emerald-600 text-white px-5 py-3 rounded-xl shadow-lg z-50 max-w-md">
           {toast}
+        </div>
+      )}
+
+      {lockConfirmCourse && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
+            <div className="p-5 border-b">
+              <h2 className="text-lg font-bold flex items-center gap-2">
+                <Lock className="w-5 h-5 text-amber-600" />
+                Lock this course?
+              </h2>
+              <p className="text-sm text-slate-600 mt-2">
+                Learners will still see <strong>{lockConfirmCourse.title}</strong>, but they
+                will not be able to start, continue, or claim a new certificate.
+                Existing progress is kept.
+              </p>
+            </div>
+            <div className="flex gap-3 p-5 bg-slate-50 rounded-b-xl">
+              <button
+                type="button"
+                onClick={() => setLockConfirmCourse(null)}
+                disabled={lockingCourseId === lockConfirmCourse.id}
+                className="flex-1 py-2.5 border rounded-lg font-medium hover:bg-white disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmLockCourse}
+                disabled={lockingCourseId === lockConfirmCourse.id}
+                className="flex-1 py-2.5 bg-amber-600 text-white rounded-lg font-medium hover:bg-amber-700 disabled:bg-slate-300"
+              >
+                {lockingCourseId === lockConfirmCourse.id ? "Locking…" : "Lock course"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
