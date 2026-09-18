@@ -10,6 +10,10 @@ import {
   unlockCourse,
   type ResetCourseProgressResult,
 } from "../api/courses";
+import {
+  getCourseAssignees,
+  type CourseAssignee,
+} from "../api/assignments";
 
 import { getApiV1BaseUrl } from "@/lib/apiConfig";
 
@@ -80,6 +84,50 @@ export const CourseAssignment: React.FC<CourseAssignmentProps> = ({
   } | null>(null);
   const [lockConfirmCourse, setLockConfirmCourse] = useState<Course | null>(null);
   const [lockingCourseId, setLockingCourseId] = useState<string | null>(null);
+  const [assignees, setAssignees] = useState<CourseAssignee[]>([]);
+  const [assigneesLoading, setAssigneesLoading] = useState(false);
+  const [assigneesError, setAssigneesError] = useState<string | null>(null);
+
+  const loadAssignees = async (courseId: string) => {
+    if (!courseId) {
+      setAssignees([]);
+      setAssigneesError(null);
+      return;
+    }
+    try {
+      setAssigneesLoading(true);
+      setAssigneesError(null);
+      const result = await getCourseAssignees(courseId);
+      setAssignees(result.assignees ?? []);
+    } catch (err: unknown) {
+      setAssignees([]);
+      setAssigneesError(
+        err instanceof Error ? err.message : "Failed to load assignees",
+      );
+    } finally {
+      setAssigneesLoading(false);
+    }
+  };
+
+  const formatAssigneeStatus = (status: string) => {
+    const normalized = String(status || "").toUpperCase().replace(/\s+/g, "_");
+    if (normalized === "COMPLETED" || normalized === "PASSED") return "Completed";
+    if (normalized === "IN_PROGRESS") return "In progress";
+    if (normalized === "FAILED") return "Failed";
+    if (normalized === "NOT_STARTED") return "Not started";
+    return status || "Not started";
+  };
+
+  const formatDate = (value?: string | null) => {
+    if (!value) return "—";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "—";
+    return date.toLocaleDateString("en-GB", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  };
 
 
   /* --------------------------------
@@ -119,10 +167,10 @@ export const CourseAssignment: React.FC<CourseAssignmentProps> = ({
       setToast(`Course assigned to ${selectedUserIds.length} trainee(s)`);
 
       await onAssignmentSuccess?.();
+      await loadAssignees(selectedCourseId);
 
       // Reset UI
       setSelectedUserIds([]);
-      setSelectedCourseId("");
       setDeadline("");
       setAiDescription(null);
 
@@ -142,6 +190,7 @@ export const CourseAssignment: React.FC<CourseAssignmentProps> = ({
     setSelectedCourseId(courseId);
     setCourseDetail(null);
     setResetPreview(null);
+    void loadAssignees(courseId);
     const course = courses.find((c) => c.id === courseId);
     if (!course) return;
 
@@ -298,6 +347,7 @@ export const CourseAssignment: React.FC<CourseAssignmentProps> = ({
       setTimeout(() => setToast(null), 6000);
 
       await onAssignmentSuccess?.();
+      await loadAssignees(selectedCourseId);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Failed to reset progress";
       setError(message);
@@ -579,6 +629,81 @@ useEffect(() => {
           ))}
         </div>
       </div>
+
+      {selectedCourseId && (
+        <div className="lg:col-span-3 bg-white rounded-lg border shadow-sm">
+          <div className="p-4 border-b bg-slate-50 flex items-center justify-between gap-3">
+            <div>
+              <h3 className="font-bold flex items-center gap-2">
+                <Users className="w-5 h-5 text-brand-primary" />
+                Assigned trainees
+              </h3>
+              <p className="text-xs text-slate-500 mt-1">
+                {selectedCourse
+                  ? `Read-only list for ${selectedCourse.title}`
+                  : "Read-only list for the selected course"}
+              </p>
+            </div>
+            <span className="text-sm text-slate-600">
+              {assigneesLoading ? "Loading…" : `${assignees.length} assigned`}
+            </span>
+          </div>
+
+          {assigneesError && (
+            <p className="p-4 text-sm text-red-600">{assigneesError}</p>
+          )}
+
+          {!assigneesLoading && !assigneesError && assignees.length === 0 && (
+            <p className="p-6 text-sm text-slate-500 text-center">
+              No trainees in your organization are assigned to this course yet.
+            </p>
+          )}
+
+          {!assigneesLoading && assignees.length > 0 && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 text-left text-slate-600">
+                  <tr>
+                    <th className="px-4 py-3 font-medium">Trainee</th>
+                    <th className="px-4 py-3 font-medium">Email</th>
+                    <th className="px-4 py-3 font-medium">Assigned</th>
+                    <th className="px-4 py-3 font-medium">Due</th>
+                    <th className="px-4 py-3 font-medium">Status</th>
+                    <th className="px-4 py-3 font-medium">Progress</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {assignees.map((row) => (
+                    <tr
+                      key={row.assignmentId}
+                      className="border-t border-slate-100"
+                    >
+                      <td className="px-4 py-3 font-medium text-slate-900">
+                        {row.fullName}
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">{row.email}</td>
+                      <td className="px-4 py-3 text-slate-600">
+                        {formatDate(row.assignedAt)}
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">
+                        {formatDate(row.dueDate)}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+                          {formatAssigneeStatus(row.status)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">
+                        {Math.round(row.progress)}%
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* SUCCESS TOAST */}
       {toast && (
