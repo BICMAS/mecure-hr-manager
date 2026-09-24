@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { User, Course } from "../types";
+import { Course } from "../types";
 import { Calendar, Users, Book, RotateCcw, AlertTriangle, X, Lock, Unlock } from "lucide-react";
 import { generateCourseDescription } from "../services/geminiService";
 import { getAccessToken } from "../utils/auth";
@@ -14,6 +14,7 @@ import {
   getCourseAssignees,
   type CourseAssignee,
 } from "../api/assignments";
+import { listBatches, type LearnerBatch } from "../api/batches";
 
 import { getApiV1BaseUrl } from "@/lib/apiConfig";
 
@@ -22,21 +23,6 @@ const API_BASE = getApiV1BaseUrl();
 interface CourseAssignmentProps {
   onAssignmentSuccess?: () => Promise<void> | void;
 }
-
-const normalizeUser = (u: any): User => ({
-  id: u.id,
-  name: u.name ?? u.fullName ?? "",
-  email: u.email ?? "",
-  role: u.role ?? u.userRole,
-  department: u.department ?? "",
-  group: u.group ?? "General",
-  avatarUrl:
-    u.avatarUrl ||
-    `https://ui-avatars.com/api/?name=${encodeURIComponent(
-      u.name ?? u.fullName ?? "User"
-    )}&background=random`,
-  points: u.points ?? 0,
-});
 
 function categoryLabel(category: unknown): string {
   if (!category) return "";
@@ -62,7 +48,8 @@ const normalizeCourse = (c: any): Course => ({
 export const CourseAssignment: React.FC<CourseAssignmentProps> = ({
   onAssignmentSuccess,
 }) => {
-  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+  const [selectedBatchIds, setSelectedBatchIds] = useState<string[]>([]);
+  const [batches, setBatches] = useState<LearnerBatch[]>([]);
   const [selectedCourseId, setSelectedCourseId] = useState("");
   const [deadline, setDeadline] = useState("");
   const [aiDescription, setAiDescription] = useState<string | null>(null);
@@ -70,7 +57,6 @@ export const CourseAssignment: React.FC<CourseAssignmentProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
-  const [users, setUsers] = useState<User[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
 
   const [resetModalOpen, setResetModalOpen] = useState(false);
@@ -134,7 +120,7 @@ export const CourseAssignment: React.FC<CourseAssignmentProps> = ({
      🎯 Assign course (API)
   --------------------------------- */
   const handleAssign = async () => {
-    if (!selectedCourseId || selectedUserIds.length === 0 || !deadline) return;
+    if (!selectedCourseId || selectedBatchIds.length === 0 || !deadline) return;
 
     try {
       setLoading(true);
@@ -145,7 +131,7 @@ export const CourseAssignment: React.FC<CourseAssignmentProps> = ({
 
       const payload = {
         courseId: selectedCourseId,
-        learnerIds: selectedUserIds,
+        batchIds: selectedBatchIds,
         dueDate: new Date(deadline).toISOString(),
       };
 
@@ -160,17 +146,18 @@ export const CourseAssignment: React.FC<CourseAssignmentProps> = ({
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.message || "Failed to assign course");
+        throw new Error(err.error || err.message || "Failed to assign course");
       }
 
-      // ✅ Success
-      setToast(`Course assigned to ${selectedUserIds.length} trainee(s)`);
+      const result = await res.json().catch(() => ({}));
+      const assigned = Number(result.assigned ?? 0);
+      const skipped = Number(result.skipped ?? 0);
+      setToast(`Assigned ${assigned} trainee(s). Skipped ${skipped}.`);
 
       await onAssignmentSuccess?.();
       await loadAssignees(selectedCourseId);
 
-      // Reset UI
-      setSelectedUserIds([]);
+      setSelectedBatchIds([]);
       setDeadline("");
       setAiDescription(null);
 
@@ -359,53 +346,29 @@ export const CourseAssignment: React.FC<CourseAssignmentProps> = ({
   /* --------------------------------
      👥 User selection
   --------------------------------- */
-  const toggleUser = (id: string) => {
-    setSelectedUserIds((prev) =>
-      prev.includes(id) ? prev.filter((u) => u !== id) : [...prev, id]
-    );
-  };
-
-  const selectAll = () => {
-    setSelectedUserIds(
-      selectedUserIds.length === users.length ? [] : users.map((u) => u.id)
+  const toggleBatch = (id: string) => {
+    setSelectedBatchIds((prev) =>
+      prev.includes(id) ? prev.filter((batchId) => batchId !== id) : [...prev, id]
     );
   };
 
   useEffect(() => {
-  const fetchOrgUsers = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const token = getAccessToken();
-      if (!token) throw new Error("Not authenticated");
-
-      const res = await fetch(
-        `${API_BASE}/users/organization/users`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.message || "Failed to fetch users");
+    const fetchBatches = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const data = await listBatches();
+        setBatches(data);
+      } catch (err: any) {
+        console.error("Failed to load batches:", err);
+        setError(err.message);
+      } finally {
+        setLoading(false);
       }
+    };
 
-      const data = await res.json();
-      setUsers(data.map(normalizeUser));
-    } catch (err: any) {
-      console.error("Failed to load org users:", err);
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  fetchOrgUsers();
-}, []);
+    fetchBatches();
+  }, []);
 
 useEffect(() => {
   const fetchCourses = async () => {
@@ -565,7 +528,7 @@ useEffect(() => {
 
         <button
           onClick={handleAssign}
-          disabled={loading || !selectedCourseId || !deadline || selectedUserIds.length === 0}
+          disabled={loading || !selectedCourseId || !deadline || selectedBatchIds.length === 0}
           className="w-full py-3 bg-brand-primary text-white rounded-lg font-medium hover:bg-brand-primary-dark disabled:bg-slate-300"
         >
           {loading ? "Assigning…" : "Assign Course"}
@@ -578,55 +541,43 @@ useEffect(() => {
       <div className="lg:col-span-2 bg-white rounded-lg border shadow-sm flex flex-col h-[600px]">
         <div className="p-4 border-b bg-slate-50 flex justify-between">
           <h3 className="font-bold flex items-center gap-2">
-            <Users className="w-5 h-5 text-brand-primary" /> Select Learners
+            <Users className="w-5 h-5 text-brand-primary" /> Select Batches
           </h3>
           <span className="text-sm text-slate-500">
-            {selectedUserIds.length} selected
+            {selectedBatchIds.length} selected
           </span>
         </div>
 
-        <div className="p-2 border-b">
-          <button
-            onClick={selectAll}
-            className="text-sm text-brand-primary font-medium"
-          >
-            {selectedUserIds.length === users.length
-              ? "Deselect All"
-              : "Select All"}
-          </button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-2 grid grid-cols-1 md:grid-cols-2 gap-2">
-          {users.map((user) => (
-            <div
-              key={user.id}
-              onClick={() => toggleUser(user.id)}
-              className={`p-3 rounded border cursor-pointer flex items-center gap-3 ${
-                selectedUserIds.includes(user.id)
-                  ? "border-brand-primary bg-brand-primary/10"
-                  : "border-slate-200 hover:border-slate-300"
-              }`}
-            >
-              <div
-                className={`w-4 h-4 rounded border ${
-                  selectedUserIds.includes(user.id)
-                    ? "bg-brand-primary/100 border-brand-primary"
-                    : "border-slate-400"
-                }`}
-              />
-              <img
-                src={user.avatarUrl}
-                className="w-8 h-8 rounded-full"
-                alt=""
-              />
-              <div>
-                <p className="text-sm font-medium">{user.name}</p>
-                <p className="text-xs text-slate-500">
-                  {user.department} • {user.role}
-                </p>
-              </div>
+        <div className="flex-1 overflow-y-auto p-4">
+          {batches.length === 0 ? (
+            <p className="text-sm text-slate-500">
+              No batches yet. Create a batch in User Management, then assign learners to it.
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {batches.map((batch) => (
+                <button
+                  key={batch.id}
+                  type="button"
+                  onClick={() => toggleBatch(batch.id)}
+                  className={`p-3 rounded border text-left flex items-center gap-3 ${
+                    selectedBatchIds.includes(batch.id)
+                      ? "border-brand-primary bg-brand-primary/10"
+                      : "border-slate-200 hover:border-slate-300"
+                  }`}
+                >
+                  <div
+                    className={`w-4 h-4 rounded border ${
+                      selectedBatchIds.includes(batch.id)
+                        ? "bg-brand-primary border-brand-primary"
+                        : "border-slate-400"
+                    }`}
+                  />
+                  <p className="text-sm font-medium">{batch.name}</p>
+                </button>
+              ))}
             </div>
-          ))}
+          )}
         </div>
       </div>
 
