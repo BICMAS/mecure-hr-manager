@@ -45,6 +45,8 @@ export interface User {
   department: Department;
   designation?: string;
   group?: string;
+  batchId?: string | null;
+  batchName?: string | null;
   avatarUrl: string;
   password?: string; // Optional for display during creation/editing
   points?: number;

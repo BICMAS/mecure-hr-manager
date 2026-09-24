@@ -5,6 +5,7 @@ import {
   Upload,
   Search,
   FileUp,
+  Download,
   Trash2,
   Edit2,
   Key,
@@ -16,6 +17,13 @@ import {
 } from "lucide-react";
 import { authFetchJson } from "@/utils/fetchWithAuth";
 import { mapFormToHrCreatePayload, mapFormToHrUpdatePayload } from "@/utils/hrUserMappers";
+import { createBatch, listBatches, type LearnerBatch } from "@/api/batches";
+import { uploadBulkUsers } from "@/api/bulkUsers";
+import { filterUsersByBatch } from "@/utils/batchFilter";
+import {
+  BULK_USER_TEMPLATE_FILENAME,
+  downloadBulkUserTemplate,
+} from "@/utils/bulkUserTemplate";
 
 const DEFAULT_PAGE_SIZE = 20;
 
@@ -27,7 +35,8 @@ const normalizeUser = (u: any): User => ({
   role: u.role ?? u.userRole,
   department: u.department ?? "",
   designation: u.designation ?? "",
-  group: u.group ?? "General",
+  batchId: u.batchId ?? u.batch?.id ?? null,
+  batchName: u.batch?.name ?? u.batchName ?? null,
   avatarUrl:
     u.avatarUrl ||
     `https://ui-avatars.com/api/?name=${encodeURIComponent(
@@ -58,6 +67,13 @@ export const UserManagement: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [batches, setBatches] = useState<LearnerBatch[]>([]);
+  const [batchFilter, setBatchFilter] = useState("all");
+  const [newBatchName, setNewBatchName] = useState("");
+  const [bulkFile, setBulkFile] = useState<File | null>(null);
+  const [bulkError, setBulkError] = useState<string | null>(null);
+  const [bulkUploading, setBulkUploading] = useState(false);
+  const [bulkNotice, setBulkNotice] = useState<string | null>(null);
 
   // User Form State
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -65,17 +81,25 @@ export const UserManagement: React.FC = () => {
   const [formData, setFormData] = useState<Partial<User>>({
     role: UserRole.LEARNER,
     department: Department.SALES,
-    group: "General",
+    batchId: null,
     password: "",
     phoneNumber: "",
   });
+
+  const loadUsersAndBatches = async () => {
+    const [userData, batchData] = await Promise.all([
+      authFetchJson<any[]>("/users/organization/users"),
+      listBatches(),
+    ]);
+    setUsers(userData.map(normalizeUser));
+    setBatches(batchData);
+  };
 
   useEffect(() => {
     const fetchUsers = async () => {
       try {
         setLoading(true);
-        const data = await authFetchJson<any[]>("/users/organization/users");
-        setUsers(data.map(normalizeUser));
+        await loadUsersAndBatches();
       } catch (err: any) {
         console.error(err);
         setError(err.message);
@@ -89,21 +113,23 @@ export const UserManagement: React.FC = () => {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm]);
+  }, [searchTerm, batchFilter]);
 
   // Delete State
   const [userToDelete, setUserToDelete] = useState<string | null>(null);
 
-  const filteredUsers = users.filter((user) => {
+  const searchedUsers = users.filter((user) => {
     const term = searchTerm.toLowerCase();
     return (
       user.name.toLowerCase().includes(term) ||
       (user.email ?? "").toLowerCase().includes(term) ||
       (user.phoneNumber ?? "").toLowerCase().includes(term) ||
       (user.designation ?? "").toLowerCase().includes(term) ||
+      (user.batchName ?? "").toLowerCase().includes(term) ||
       user.department.toLowerCase().includes(term)
     );
   });
+  const filteredUsers = filterUsersByBatch(searchedUsers, batchFilter);
 
   const totalUsers = filteredUsers.length;
   const totalPages = Math.max(1, Math.ceil(totalUsers / pageSize));
@@ -131,10 +157,11 @@ export const UserManagement: React.FC = () => {
   const handleOpenCreate = () => {
     setEditingId(null);
     setFormError(null);
+    setNewBatchName("");
     setFormData({
       role: UserRole.LEARNER,
       department: Department.SALES,
-      group: "General",
+      batchId: null,
       password: "",
       phoneNumber: "",
       email: "",
@@ -147,6 +174,7 @@ export const UserManagement: React.FC = () => {
   const handleOpenEdit = (user: User) => {
     setEditingId(user.id);
     setFormError(null);
+    setNewBatchName("");
     setFormData({ ...user, password: user.password || "" }); // Populate if available, else blank
     setIsModalOpen(true);
     setShowPassword(false);
@@ -199,9 +227,8 @@ export const UserManagement: React.FC = () => {
           prev.map((u) => (u.id === editingId ? normalizeUser(updated) : u)),
         );
       } else {
-        const created = await createUserByHr(formData);
-
-        setUsers((prev) => [normalizeUser(created), ...prev]);
+        await createUserByHr(formData);
+        await loadUsersAndBatches();
       }
 
       setIsModalOpen(false);
@@ -215,19 +242,39 @@ export const UserManagement: React.FC = () => {
     <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
       {/* Toolbar */}
       <div className="p-4 border-b border-slate-200 flex flex-col sm:flex-row justify-between items-center gap-4">
-        <div className="relative w-full sm:w-64">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4" />
-          <input
-            type="text"
-            placeholder="Search users..."
-            className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          <div className="relative w-full sm:w-64">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4" />
+            <input
+              type="text"
+              placeholder="Search users..."
+              className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+          <select
+            aria-label="Filter by batch"
+            className="w-full sm:w-48 border border-slate-300 rounded px-3 py-2 text-sm text-slate-700"
+            value={batchFilter}
+            onChange={(e) => setBatchFilter(e.target.value)}
+          >
+            <option value="all">All batches</option>
+            <option value="unassigned">Unassigned</option>
+            {batches.map((batch) => (
+              <option key={batch.id} value={batch.id}>
+                {batch.name}
+              </option>
+            ))}
+          </select>
         </div>
         <div className="flex gap-2 w-full sm:w-auto">
           <button
-            onClick={() => setIsBulkOpen(true)}
+            onClick={() => {
+              setBulkFile(null);
+              setBulkError(null);
+              setIsBulkOpen(true);
+            }}
             className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded text-sm font-medium hover:bg-slate-50"
           >
             <Upload className="w-4 h-4" /> Bulk Upload
@@ -240,6 +287,12 @@ export const UserManagement: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {bulkNotice && (
+        <div className="px-4 py-3 text-sm text-emerald-800 bg-emerald-50 border-b border-emerald-100">
+          {bulkNotice}
+        </div>
+      )}
 
       {/* Table */}
       <div className="overflow-x-auto">
@@ -260,7 +313,7 @@ export const UserManagement: React.FC = () => {
               <th className="px-6 py-3">Role</th>
               <th className="px-6 py-3">Department</th>
               <th className="px-6 py-3">Designation</th>
-              <th className="px-6 py-3">Group</th>
+              <th className="px-6 py-3">Batch</th>
               <th className="px-6 py-3 text-right">Actions</th>
             </tr>
           </thead>
@@ -301,7 +354,9 @@ export const UserManagement: React.FC = () => {
                 <td className="px-6 py-3 text-slate-600">
                   {user.designation?.trim() || "—"}
                 </td>
-                <td className="px-6 py-3 text-slate-500">{user.group}</td>
+                <td className="px-6 py-3 text-slate-500">
+                  {user.batchName || "Unassigned"}
+                </td>
                 <td className="px-6 py-3 text-right">
                   <div className="flex justify-end gap-2">
                     <button
@@ -533,16 +588,63 @@ export const UserManagement: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Group (Optional)
+                  Batch (Optional)
                 </label>
-                <input
-                  type="text"
-                  className="w-full border p-2 rounded focus:ring-2 focus:ring-brand-primary"
-                  value={formData.group || ""}
+                <select
+                  className="w-full border p-2 rounded"
+                  value={formData.batchId || ""}
                   onChange={(e) =>
-                    setFormData({ ...formData, group: e.target.value })
+                    setFormData({
+                      ...formData,
+                      batchId: e.target.value || null,
+                    })
                   }
-                />
+                >
+                  <option value="">Unassigned</option>
+                  {batches.map((batch) => (
+                    <option key={batch.id} value={batch.id}>
+                      {batch.name}
+                    </option>
+                  ))}
+                </select>
+                <div className="flex gap-2 mt-2">
+                  <input
+                    type="text"
+                    className="flex-1 border p-2 rounded focus:ring-2 focus:ring-brand-primary"
+                    value={newBatchName}
+                    onChange={(e) => setNewBatchName(e.target.value)}
+                    placeholder="New batch name"
+                  />
+                  <button
+                    type="button"
+                    className="px-3 py-2 bg-slate-100 border border-slate-200 rounded hover:bg-slate-200 text-slate-700 text-sm"
+                    onClick={async () => {
+                      const name = newBatchName.trim();
+                      if (!name) {
+                        setFormError("Batch name is required.");
+                        return;
+                      }
+                      try {
+                        const created = await createBatch(name);
+                        setBatches((prev) =>
+                          [...prev, created].sort((a, b) =>
+                            a.name.localeCompare(b.name),
+                          ),
+                        );
+                        setFormData((current) => ({
+                          ...current,
+                          batchId: created.id,
+                        }));
+                        setNewBatchName("");
+                        setFormError(null);
+                      } catch (err: any) {
+                        setFormError(err.message || "Failed to create batch");
+                      }
+                    }}
+                  >
+                    Add batch
+                  </button>
+                </div>
               </div>
 
               <div className="flex justify-end gap-2 mt-6">
@@ -572,28 +674,86 @@ export const UserManagement: React.FC = () => {
             <h3 className="text-lg font-bold text-slate-900 mb-2">
               Bulk User Upload
             </h3>
-            <p className="text-sm text-slate-500 mb-6">
-              Upload a CSV file containing user details (Name, Email and/or
-              Phone, Role, Department, Designation).
+            <p className="text-sm text-slate-500 mb-4">
+              Upload a CSV file with learner details. Download the template,
+              fill it in, then upload that file.
             </p>
 
-            <div className="border-2 border-dashed border-slate-300 rounded-lg p-8 flex flex-col items-center justify-center text-center bg-slate-50 hover:bg-slate-100 transition cursor-pointer">
+            <button
+              type="button"
+              onClick={downloadBulkUserTemplate}
+              className="mb-4 inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-brand-primary border border-brand-primary/30 rounded hover:bg-brand-primary/5"
+            >
+              <Download className="w-4 h-4" />
+              Download template
+            </button>
+
+            <label className="border-2 border-dashed border-slate-300 rounded-lg p-8 flex flex-col items-center justify-center text-center bg-slate-50 hover:bg-slate-100 transition cursor-pointer">
               <FileUp className="w-10 h-10 text-slate-400 mb-3" />
               <p className="text-sm font-medium text-slate-700">
-                Click to upload or drag and drop
+                {bulkFile ? bulkFile.name : "Click to choose a CSV file"}
               </p>
               <p className="text-xs text-slate-400 mt-1">
-                CSV or Excel (max 5MB)
+                CSV only. Template file: {BULK_USER_TEMPLATE_FILENAME}
               </p>
-              <input type="file" className="hidden" />
-            </div>
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                className="hidden"
+                onChange={(event) => {
+                  const file = event.target.files?.[0] ?? null;
+                  if (file && !file.name.toLowerCase().endsWith(".csv")) {
+                    setBulkFile(null);
+                    setBulkError("Upload a CSV file.");
+                    return;
+                  }
+                  setBulkFile(file);
+                  setBulkError(null);
+                }}
+              />
+            </label>
+
+            {bulkError && (
+              <p className="mt-3 text-sm text-red-600">{bulkError}</p>
+            )}
 
             <div className="flex justify-end gap-2 mt-6">
               <button
+                type="button"
                 onClick={() => setIsBulkOpen(false)}
                 className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded"
+                disabled={bulkUploading}
               >
                 Close
+              </button>
+              <button
+                type="button"
+                disabled={!bulkFile || bulkUploading}
+                onClick={async () => {
+                  if (!bulkFile) return;
+                  setBulkUploading(true);
+                  setBulkError(null);
+                  try {
+                    const result = await uploadBulkUsers(bulkFile);
+                    const created = result.created ?? 0;
+                    const skipped = result.skipped ?? 0;
+                    setBulkNotice(
+                      result.message && created === 0
+                        ? result.message
+                        : `Created ${created} users. Skipped ${skipped}.`,
+                    );
+                    setIsBulkOpen(false);
+                    setBulkFile(null);
+                    await loadUsersAndBatches();
+                  } catch (err: any) {
+                    setBulkError(err.message || "Failed to upload users");
+                  } finally {
+                    setBulkUploading(false);
+                  }
+                }}
+                className="px-4 py-2 bg-brand-primary text-white rounded hover:bg-brand-primary-dark disabled:opacity-50"
+              >
+                {bulkUploading ? "Uploading…" : "Upload CSV"}
               </button>
             </div>
           </div>
