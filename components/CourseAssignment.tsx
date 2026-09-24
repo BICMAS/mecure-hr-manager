@@ -220,6 +220,10 @@ export const CourseAssignment: React.FC<CourseAssignmentProps> = ({
 
   const openResetModal = async () => {
     if (!selectedCourseId) return;
+    if (selectedBatchIds.length === 0) {
+      setError("Select at least one batch to reset.");
+      return;
+    }
     setResetModalOpen(true);
     setResetLoading(true);
     setResetPreview(null);
@@ -237,6 +241,7 @@ export const CourseAssignment: React.FC<CourseAssignmentProps> = ({
         {
           deleteCertificates,
           resetModuleProgress: true,
+          batchIds: selectedBatchIds,
           newPacingStartDate: detail.modulePacingEnabled && newPacingStartDate
             ? newPacingStartDate
             : undefined,
@@ -262,6 +267,7 @@ export const CourseAssignment: React.FC<CourseAssignmentProps> = ({
         {
           deleteCertificates,
           resetModuleProgress: true,
+          batchIds: selectedBatchIds,
           newPacingStartDate:
             courseDetail?.modulePacingEnabled && newPacingStartDate
               ? newPacingStartDate
@@ -314,6 +320,10 @@ export const CourseAssignment: React.FC<CourseAssignmentProps> = ({
 
   const handleConfirmReset = async () => {
     if (!selectedCourseId) return;
+    if (selectedBatchIds.length === 0) {
+      setError("Select at least one batch to reset.");
+      return;
+    }
     setResetLoading(true);
     setError(null);
 
@@ -323,6 +333,7 @@ export const CourseAssignment: React.FC<CourseAssignmentProps> = ({
         {
           deleteCertificates,
           resetModuleProgress: true,
+          batchIds: selectedBatchIds,
           newPacingStartDate:
             courseDetail?.modulePacingEnabled && newPacingStartDate
               ? newPacingStartDate
@@ -428,7 +439,7 @@ useEffect(() => {
     }, 300);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deleteCertificates, newPacingStartDate]);
+  }, [deleteCertificates, newPacingStartDate, selectedBatchIds]);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -523,17 +534,18 @@ useEffect(() => {
               <RotateCcw className="w-5 h-5" /> Reset learner progress
             </h3>
             <p className="text-xs text-amber-800 mb-3">
-              Use after Super Admin publishes an updated SCORM version. All assigned
-              learners in your organization will return to 0% / Not Started.
-              Assignments are kept.
+              Use after Super Admin publishes an updated SCORM version. Only learners
+              in the selected batches who are already assigned to this course return
+              to 0% / Not Started. Learners in other batches, and learners with no
+              batch, are left unchanged. Assignments are kept.
             </p>
             <button
               type="button"
               onClick={openResetModal}
-              disabled={loading || resetLoading}
+              disabled={loading || resetLoading || selectedBatchIds.length === 0}
               className="w-full py-2.5 border border-amber-400 text-amber-900 rounded-lg font-medium hover:bg-amber-100 disabled:opacity-50"
             >
-              Reset all learner progress…
+              Reset selected batches…
             </button>
           </div>
         )}
@@ -752,7 +764,7 @@ useEffect(() => {
               <div>
                 <h2 className="text-lg font-bold flex items-center gap-2">
                   <AlertTriangle className="w-5 h-5 text-amber-600" />
-                  Reset all learner progress
+                  Reset selected batch progress
                 </h2>
                 <p className="text-sm text-slate-600 mt-1">
                   {selectedCourse?.title ?? "Selected course"}

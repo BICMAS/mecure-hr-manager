@@ -7,6 +7,7 @@ export interface ResetCourseProgressOptions {
   deleteCertificates?: boolean;
   resetModuleProgress?: boolean;
   newPacingStartDate?: string;
+  batchIds?: string[];
 }
 
 export interface ResetCourseProgressResult {
@@ -53,6 +54,7 @@ export async function resetCourseProgress(
         deleteCertificates: options.deleteCertificates ?? true,
         resetModuleProgress: options.resetModuleProgress ?? true,
         newPacingStartDate: options.newPacingStartDate,
+        batchIds: options.batchIds,
       }),
     },
   );
