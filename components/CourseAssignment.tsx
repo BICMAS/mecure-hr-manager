@@ -15,10 +15,12 @@ import {
   type CourseAssignee,
 } from "../api/assignments";
 import { listBatches, type LearnerBatch } from "../api/batches";
+import { paginate } from "../utils/paginate";
 
 import { getApiV1BaseUrl } from "@/lib/apiConfig";
 
 const API_BASE = getApiV1BaseUrl();
+const ASSIGNEE_PAGE_SIZE = 20;
 
 interface CourseAssignmentProps {
   onAssignmentSuccess?: () => Promise<void> | void;
@@ -73,8 +75,10 @@ export const CourseAssignment: React.FC<CourseAssignmentProps> = ({
   const [assignees, setAssignees] = useState<CourseAssignee[]>([]);
   const [assigneesLoading, setAssigneesLoading] = useState(false);
   const [assigneesError, setAssigneesError] = useState<string | null>(null);
+  const [assigneePage, setAssigneePage] = useState(1);
 
   const loadAssignees = async (courseId: string) => {
+    setAssigneePage(1);
     if (!courseId) {
       setAssignees([]);
       setAssigneesError(null);
@@ -94,6 +98,14 @@ export const CourseAssignment: React.FC<CourseAssignmentProps> = ({
       setAssigneesLoading(false);
     }
   };
+
+  const assigneePages = paginate(assignees, assigneePage, ASSIGNEE_PAGE_SIZE);
+
+  useEffect(() => {
+    if (assigneePage !== assigneePages.page) {
+      setAssigneePage(assigneePages.page);
+    }
+  }, [assigneePage, assigneePages.page]);
 
   const formatAssigneeStatus = (status: string) => {
     const normalized = String(status || "").toUpperCase().replace(/\s+/g, "_");
@@ -624,7 +636,7 @@ useEffect(() => {
                   </tr>
                 </thead>
                 <tbody>
-                  {assignees.map((row) => (
+                  {assigneePages.items.map((row) => (
                     <tr
                       key={row.assignmentId}
                       className="border-t border-slate-100"
@@ -651,6 +663,39 @@ useEffect(() => {
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {!assigneesLoading && assignees.length > 0 && (
+            <div className="flex flex-col gap-3 border-t border-slate-200 px-4 py-3 text-sm md:flex-row md:items-center md:justify-between">
+              <p className="text-slate-600">
+                Showing {assigneePages.from}–{assigneePages.to} of {assigneePages.total}
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setAssigneePage((page) => Math.max(page - 1, 1))}
+                  disabled={assigneePages.page === 1}
+                  className="rounded border border-slate-300 px-3 py-1.5 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Previous
+                </button>
+                <span className="min-w-24 text-center text-slate-600">
+                  Page {assigneePages.page} / {assigneePages.totalPages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setAssigneePage((page) =>
+                      Math.min(page + 1, assigneePages.totalPages),
+                    )
+                  }
+                  disabled={assigneePages.page === assigneePages.totalPages}
+                  className="rounded border border-slate-300 px-3 py-1.5 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Next
+                </button>
+              </div>
             </div>
           )}
         </div>
