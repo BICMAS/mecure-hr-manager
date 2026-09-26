@@ -30,6 +30,51 @@ export interface ActivityReportTrainee extends ActivityReportTotals {
 
 export interface ActivityReportBreakdown extends ActivityReportTotals {
   label: string;
+  completionRate?: number;
+}
+
+export interface ActivityReportComparison {
+  learners: number;
+  averageProgress: number;
+  completionRate: number;
+  passRate: number;
+  learningHours: number;
+  atRisk: number;
+}
+
+export interface ActivityReportSummary extends ActivityReportComparison {
+  comparison: ActivityReportComparison | null;
+}
+
+export interface ActivityReportAnalytics {
+  summary: ActivityReportSummary;
+  funnel: {
+    assigned: number;
+    started: number;
+    completed: number;
+    passed: number;
+  };
+  courses: Array<{
+    title: string;
+    assigned: number;
+    completionRate: number;
+    averageScore: number | null;
+  }>;
+  atRisk: Array<{
+    id: string;
+    fullName: string;
+    batch: string;
+    department: string;
+    reason: string;
+    daysInactive: number | null;
+  }>;
+  trend: Array<{
+    month: string;
+    label: string;
+    activeLearners: number;
+    learningHours: number;
+    averageProgress: number;
+  }>;
 }
 
 export interface ActivityReport {
@@ -41,9 +86,16 @@ export interface ActivityReport {
     breakdown: "batch" | "department";
   };
   breakdownBy: "batch" | "department";
-  totals: ActivityReportTotals;
+  totals: ActivityReportTotals & {
+    startedCourses?: number;
+    completedCourses?: number;
+    passedCourses?: number;
+    completionRate?: number;
+    passRate?: number;
+  };
   breakdown: ActivityReportBreakdown[];
   trainees: ActivityReportTrainee[];
+  analytics: ActivityReportAnalytics;
   message: string | null;
 }
 

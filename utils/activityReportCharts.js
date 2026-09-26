@@ -13,6 +13,7 @@ export function activityReportChartData(report) {
 
   const groups = report.breakdown.map((row) => ({
     label: formatGroupLabel(row.label, report.breakdownBy),
+    completionRate: row.completionRate ?? 0,
     averageProgress: row.averageProgress,
     overdueCourses: row.overdueCourses,
   }));
@@ -22,9 +23,9 @@ export function activityReportChartData(report) {
     groups,
     activityMix: [
       { name: "SCORM attempts", value: totals.scormAttempts },
-      { name: "Certificates", value: totals.certificates },
       { name: "Quiz attempts", value: totals.quizAttempts },
       { name: "Field tasks", value: totals.fieldTasks },
+      { name: "Certificates", value: totals.certificates },
     ],
   };
 }

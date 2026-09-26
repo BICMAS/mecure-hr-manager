@@ -5,6 +5,9 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  ComposedChart,
+  Legend,
+  Line,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -29,71 +32,168 @@ function formatScore(value: number | null) {
   return value == null ? "—" : `${value}%`;
 }
 
+function formatDelta(value: number, suffix = "") {
+  const sign = value > 0 ? "+" : "";
+  return `${sign}${value}${suffix} vs previous period`;
+}
+
 function ActivityReportCharts({ report }: { report: ActivityReportData }) {
   const charts = activityReportChartData(report);
-  if (!charts) return null;
+  const analytics = report.analytics;
+  if (!charts || !analytics) return null;
 
-  const groupAxis = report.breakdownBy === "department" ? "Department" : "Batch";
+  const groupAxis = report.breakdownBy === "department" ? "department" : "batch";
+  const funnelMax = Math.max(analytics.funnel.assigned, 1);
+  const funnelSteps = [
+    ["Assigned", analytics.funnel.assigned],
+    ["Started", analytics.funnel.started],
+    ["Completed", analytics.funnel.completed],
+    ["Passed", analytics.funnel.passed],
+  ] as const;
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-      <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
-        <h3 className="font-bold mb-4">Average progress by {groupAxis.toLowerCase()}</h3>
-        <div className="h-64">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={charts.groups} layout="vertical" margin={{ left: 8, right: 16 }}>
-              <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
-              <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11, fill: "#64748b" }} unit="%" />
-              <YAxis
-                dataKey="label"
-                type="category"
-                width={96}
-                tick={{ fontSize: 11, fill: "#64748b" }}
-              />
-              <Tooltip formatter={(value) => [`${value}%`, "Average progress"]} />
-              <Bar dataKey="averageProgress" fill="#0056A6" radius={[0, 4, 4, 0]} barSize={18} />
-            </BarChart>
-          </ResponsiveContainer>
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+        <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
+          <h3 className="font-bold mb-4">Performance by {groupAxis}</h3>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={charts.groups} layout="vertical" margin={{ left: 8, right: 16 }}>
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
+                <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11, fill: "#64748b" }} unit="%" />
+                <YAxis dataKey="label" type="category" width={96} tick={{ fontSize: 11, fill: "#64748b" }} />
+                <Tooltip formatter={(value) => [`${value}%`, "Completion rate"]} />
+                <Bar dataKey="completionRate" fill="#0056A6" radius={[0, 4, 4, 0]} barSize={18} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
+          <h3 className="font-bold mb-4">Monthly trend</h3>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={analytics.trend} margin={{ left: 0, right: 8, bottom: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#64748b" }} />
+                <YAxis yAxisId="hours" tick={{ fontSize: 11, fill: "#64748b" }} />
+                <YAxis yAxisId="learners" orientation="right" allowDecimals={false} tick={{ fontSize: 11, fill: "#64748b" }} />
+                <Tooltip />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Bar yAxisId="hours" dataKey="learningHours" name="Learning hours" fill="#69BE28" radius={[4, 4, 0, 0]} barSize={18} />
+                <Line yAxisId="learners" dataKey="activeLearners" name="Active learners" stroke="#0056A6" strokeWidth={2} dot={false} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
+          <h3 className="font-bold mb-4">Activity mix</h3>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={charts.activityMix} margin={{ left: 0, right: 8, bottom: 24 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#64748b" }} interval={0} angle={-20} textAnchor="end" height={48} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "#64748b" }} />
+                <Tooltip />
+                <Bar dataKey="value" radius={[4, 4, 0, 0]} barSize={28}>
+                  {charts.activityMix.map((entry, index) => (
+                    <Cell key={entry.name} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </div>
       </div>
 
-      <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
-        <h3 className="font-bold mb-4">Overdue courses by {groupAxis.toLowerCase()}</h3>
-        <div className="h-64">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={charts.groups} layout="vertical" margin={{ left: 8, right: 16 }}>
-              <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
-              <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fill: "#64748b" }} />
-              <YAxis
-                dataKey="label"
-                type="category"
-                width={96}
-                tick={{ fontSize: 11, fill: "#64748b" }}
-              />
-              <Tooltip formatter={(value) => [value, "Overdue courses"]} />
-              <Bar dataKey="overdueCourses" fill="#D32F2F" radius={[0, 4, 4, 0]} barSize={18} />
-            </BarChart>
-          </ResponsiveContainer>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
+          <h3 className="font-bold mb-4">Learner journey</h3>
+          <div className="space-y-3">
+            {funnelSteps.map(([label, value], index) => (
+              <div key={label}>
+                <div className="flex justify-between text-sm mb-1">
+                  <span>{label}</span>
+                  <span className="font-medium">{value}</span>
+                </div>
+                <div className="h-3 rounded-full bg-slate-100 overflow-hidden">
+                  <div
+                    className="h-full rounded-full"
+                    style={{
+                      width: `${Math.min(100, (value / funnelMax) * 100)}%`,
+                      background: CHART_COLORS[index % CHART_COLORS.length],
+                    }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
+          <div className="px-4 py-3 border-b bg-slate-50">
+            <h3 className="font-bold">At-risk trainees</h3>
+          </div>
+          {analytics.atRisk.length === 0 ? (
+            <p className="p-4 text-sm text-slate-500">No trainees are at risk for these filters.</p>
+          ) : (
+            <div className="max-h-64 overflow-auto">
+              <table className="w-full text-sm">
+                <thead className="text-left text-slate-600">
+                  <tr>
+                    <th className="px-4 py-2 font-medium">Trainee</th>
+                    <th className="px-4 py-2 font-medium">{groupAxis === "department" ? "Department" : "Batch"}</th>
+                    <th className="px-4 py-2 font-medium">Reason</th>
+                    <th className="px-4 py-2 font-medium">Days inactive</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {analytics.atRisk.map((row) => (
+                    <tr key={row.id} className="border-t border-slate-100">
+                      <td className="px-4 py-2 font-medium">{row.fullName}</td>
+                      <td className="px-4 py-2">
+                        {groupAxis === "department" ? formatDepartmentLabel(row.department) : row.batch}
+                      </td>
+                      <td className="px-4 py-2">{row.reason}</td>
+                      <td className="px-4 py-2">{row.daysInactive ?? "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
 
-      <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
-        <h3 className="font-bold mb-4">Activity mix</h3>
-        <div className="h-64">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={charts.activityMix} margin={{ left: 0, right: 8, bottom: 24 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-              <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#64748b" }} interval={0} angle={-20} textAnchor="end" height={48} />
-              <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "#64748b" }} />
-              <Tooltip />
-              <Bar dataKey="value" radius={[4, 4, 0, 0]} barSize={28}>
-                {charts.activityMix.map((entry, index) => (
-                  <Cell key={entry.name} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+      <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-x-auto">
+        <div className="px-4 py-3 border-b bg-slate-50">
+          <h3 className="font-bold">Course effectiveness</h3>
         </div>
+        {analytics.courses.length === 0 ? (
+          <p className="p-4 text-sm text-slate-500">No course assignments in this date range.</p>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="text-left text-slate-600">
+              <tr>
+                <th className="px-4 py-3 font-medium">Course</th>
+                <th className="px-4 py-3 font-medium">Assigned</th>
+                <th className="px-4 py-3 font-medium">Completion rate</th>
+                <th className="px-4 py-3 font-medium">Average score</th>
+              </tr>
+            </thead>
+            <tbody>
+              {analytics.courses.map((course) => (
+                <tr key={course.title} className="border-t border-slate-100">
+                  <td className="px-4 py-3 font-medium">{course.title}</td>
+                  <td className="px-4 py-3">{course.assigned}</td>
+                  <td className="px-4 py-3">{course.completionRate}%</td>
+                  <td className="px-4 py-3">{formatScore(course.averageScore)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     </div>
   );
@@ -255,24 +355,21 @@ export const ActivityReport: React.FC = () => {
 
       {totals && report && report.trainees.length > 0 && (
         <>
-          <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
             {[
-              ["Trainees", totals.trainees],
-              ["Assigned courses", totals.assignedCourses],
-              ["Average progress", `${totals.averageProgress}%`],
-              ["Average score", formatScore(totals.averageScore)],
-              ["Learning hours", totals.learningHours],
-              ["Overdue", totals.overdueCourses],
-              ["Module progress", `${totals.moduleProgressCompleted}/${totals.moduleProgressTracked}`],
-              ["SCORM attempts", totals.scormAttempts],
-              ["Certificates", totals.certificates],
-              ["Quiz attempts", totals.quizAttempts],
-              ["Field tasks", totals.fieldTasks],
-              ["Points", totals.points],
-            ].map(([label, value]) => (
+              ["Learners", report.analytics.summary.learners, report.analytics.summary.comparison?.learners, ""],
+              ["Average progress", `${report.analytics.summary.averageProgress}%`, report.analytics.summary.comparison?.averageProgress, " pts"],
+              ["Completion rate", `${report.analytics.summary.completionRate}%`, report.analytics.summary.comparison?.completionRate, " pts"],
+              ["Pass rate", `${report.analytics.summary.passRate}%`, report.analytics.summary.comparison?.passRate, " pts"],
+              ["Learning hours", report.analytics.summary.learningHours, report.analytics.summary.comparison?.learningHours, ""],
+              ["At-risk trainees", report.analytics.summary.atRisk, report.analytics.summary.comparison?.atRisk, ""],
+            ].map(([label, value, delta, suffix]) => (
               <div key={String(label)} className="bg-white border border-slate-200 rounded-lg p-3">
                 <p className="text-xs text-slate-500">{label}</p>
                 <p className="text-lg font-semibold text-slate-900">{value}</p>
+                {typeof delta === "number" && (
+                  <p className="text-xs text-slate-500 mt-1">{formatDelta(delta, String(suffix))}</p>
+                )}
               </div>
             ))}
           </div>
