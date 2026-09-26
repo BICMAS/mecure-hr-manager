@@ -1,5 +1,15 @@
 import React, { useEffect, useState } from "react";
 import { Download } from "lucide-react";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { Department, formatDepartmentLabel } from "../types";
 import { listBatches, LearnerBatch } from "../api/batches";
 import {
@@ -8,9 +18,82 @@ import {
   downloadActivityReportCsv,
   getActivityReport,
 } from "../api/activityReport";
+import { activityReportChartData } from "../utils/activityReportCharts";
+
+const CHART_COLORS = ["#0056A6", "#69BE28", "#F5A623", "#D32F2F"];
 
 function formatScore(value: number | null) {
   return value == null ? "—" : `${value}%`;
+}
+
+function ActivityReportCharts({ report }: { report: ActivityReportData }) {
+  const charts = activityReportChartData(report);
+  if (!charts) return null;
+
+  const groupAxis = report.breakdownBy === "department" ? "Department" : "Batch";
+
+  return (
+    <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+      <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
+        <h3 className="font-bold mb-4">Average progress by {groupAxis.toLowerCase()}</h3>
+        <div className="h-64">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={charts.groups} layout="vertical" margin={{ left: 8, right: 16 }}>
+              <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
+              <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11, fill: "#64748b" }} unit="%" />
+              <YAxis
+                dataKey="label"
+                type="category"
+                width={96}
+                tick={{ fontSize: 11, fill: "#64748b" }}
+              />
+              <Tooltip formatter={(value) => [`${value}%`, "Average progress"]} />
+              <Bar dataKey="averageProgress" fill="#0056A6" radius={[0, 4, 4, 0]} barSize={18} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
+        <h3 className="font-bold mb-4">Overdue courses by {groupAxis.toLowerCase()}</h3>
+        <div className="h-64">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={charts.groups} layout="vertical" margin={{ left: 8, right: 16 }}>
+              <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
+              <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fill: "#64748b" }} />
+              <YAxis
+                dataKey="label"
+                type="category"
+                width={96}
+                tick={{ fontSize: 11, fill: "#64748b" }}
+              />
+              <Tooltip formatter={(value) => [value, "Overdue courses"]} />
+              <Bar dataKey="overdueCourses" fill="#D32F2F" radius={[0, 4, 4, 0]} barSize={18} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
+        <h3 className="font-bold mb-4">Activity mix</h3>
+        <div className="h-64">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={charts.activityMix} margin={{ left: 0, right: 8, bottom: 24 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+              <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#64748b" }} interval={0} angle={-20} textAnchor="end" height={48} />
+              <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "#64748b" }} />
+              <Tooltip />
+              <Bar dataKey="value" radius={[4, 4, 0, 0]} barSize={28}>
+                {charts.activityMix.map((entry, index) => (
+                  <Cell key={entry.name} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export const ActivityReport: React.FC = () => {
@@ -180,6 +263,8 @@ export const ActivityReport: React.FC = () => {
               </div>
             ))}
           </div>
+
+          <ActivityReportCharts report={report} />
 
           <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-x-auto">
             <div className="px-4 py-3 border-b bg-slate-50">
