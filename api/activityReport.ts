@@ -75,6 +75,61 @@ export interface ActivityReportAnalytics {
     learningHours: number;
     averageProgress: number;
   }>;
+  scorm: {
+    registrations: Array<{
+      id: string;
+      fullName: string;
+      courseTitle: string;
+      completion: string | null;
+      success: string | null;
+      scorePercent: number | null;
+      learningHours: number | null;
+      firstAccessAt: string | null;
+      lastAccessAt: string | null;
+    }>;
+    activities: Array<{
+      id: string;
+      fullName: string;
+      title: string;
+      completion: string | null;
+      success: string | null;
+      scorePercent: number | null;
+      timeTrackedSeconds: number | null;
+    }>;
+    interactions: {
+      correct: number;
+      incorrect: number;
+      rows: Array<{
+        id: string;
+        fullName: string;
+        question: string;
+        result: string | null;
+        weighting: number | null;
+      }>;
+    };
+    objectives: Array<{
+      id: string;
+      fullName: string;
+      objectiveId: string;
+      success: string | null;
+      completion: string | null;
+      scorePercent: number | null;
+    }>;
+    comments: Array<{
+      id: string;
+      fullName: string;
+      comment: string;
+    }>;
+    scoreBands: {
+      under50: number;
+      from50to79: number;
+      from80: number;
+    };
+    launches: {
+      count: number;
+      sessionHours: number;
+    };
+  };
 }
 
 export interface ActivityReport {

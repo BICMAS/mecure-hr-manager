@@ -8,6 +8,8 @@ import {
   ComposedChart,
   Legend,
   Line,
+  Pie,
+  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -37,6 +39,218 @@ function formatDelta(value: number, suffix = "") {
   return `${sign}${value}${suffix} vs previous period`;
 }
 
+function formatWhen(value: string | null) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric", timeZone: "UTC" });
+}
+
+function formatTrackedTime(seconds: number | null) {
+  if (seconds == null || !Number.isFinite(seconds)) return "—";
+  const hours = Math.round((seconds / 3600) * 100) / 100;
+  return `${hours} h`;
+}
+
+function EmptyPanel({ message }: { message: string }) {
+  return <p className="p-4 text-sm text-slate-500">{message}</p>;
+}
+
+function Panel({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
+      <div className="px-4 py-3 border-b bg-slate-50">
+        <h3 className="font-bold">{title}</h3>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function ScormReportPanels({ scorm }: { scorm: ActivityReportData["analytics"]["scorm"] | undefined }) {
+  const registrations = scorm?.registrations ?? [];
+  const activities = scorm?.activities ?? [];
+  const interactions = scorm?.interactions ?? { correct: 0, incorrect: 0, rows: [] };
+  const objectives = scorm?.objectives ?? [];
+  const comments = scorm?.comments ?? [];
+  const launches = scorm?.launches ?? { count: 0, sessionHours: 0 };
+
+  return (
+    <div className="space-y-4">
+      <Panel title="Registrations">
+        {registrations.length === 0 ? (
+          <EmptyPanel message="No SCORM registrations were returned for these filters." />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-left text-slate-600">
+                <tr>
+                  <th className="px-4 py-3 font-medium">Trainee</th>
+                  <th className="px-4 py-3 font-medium">Course</th>
+                  <th className="px-4 py-3 font-medium">Completion</th>
+                  <th className="px-4 py-3 font-medium">Success</th>
+                  <th className="px-4 py-3 font-medium">Score</th>
+                  <th className="px-4 py-3 font-medium">Time</th>
+                  <th className="px-4 py-3 font-medium">First access</th>
+                  <th className="px-4 py-3 font-medium">Last access</th>
+                </tr>
+              </thead>
+              <tbody>
+                {registrations.map((row) => (
+                  <tr key={row.id} className="border-t border-slate-100">
+                    <td className="px-4 py-3 font-medium">{row.fullName}</td>
+                    <td className="px-4 py-3">{row.courseTitle}</td>
+                    <td className="px-4 py-3">{row.completion || "—"}</td>
+                    <td className="px-4 py-3">{row.success || "—"}</td>
+                    <td className="px-4 py-3">{formatScore(row.scorePercent)}</td>
+                    <td className="px-4 py-3">{row.learningHours == null ? "—" : `${row.learningHours} h`}</td>
+                    <td className="px-4 py-3">{formatWhen(row.firstAccessAt)}</td>
+                    <td className="px-4 py-3">{formatWhen(row.lastAccessAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Panel>
+
+      <Panel title="Activity detail">
+        {activities.length === 0 ? (
+          <EmptyPanel message="No activity detail was returned for these filters." />
+        ) : (
+          <div className="overflow-x-auto max-h-80">
+            <table className="w-full text-sm">
+              <thead className="text-left text-slate-600">
+                <tr>
+                  <th className="px-4 py-3 font-medium">Trainee</th>
+                  <th className="px-4 py-3 font-medium">Activity</th>
+                  <th className="px-4 py-3 font-medium">Completion</th>
+                  <th className="px-4 py-3 font-medium">Success</th>
+                  <th className="px-4 py-3 font-medium">Score</th>
+                  <th className="px-4 py-3 font-medium">Time</th>
+                </tr>
+              </thead>
+              <tbody>
+                {activities.map((row) => (
+                  <tr key={row.id} className="border-t border-slate-100">
+                    <td className="px-4 py-3 font-medium">{row.fullName}</td>
+                    <td className="px-4 py-3">{row.title}</td>
+                    <td className="px-4 py-3">{row.completion || "—"}</td>
+                    <td className="px-4 py-3">{row.success || "—"}</td>
+                    <td className="px-4 py-3">{formatScore(row.scorePercent)}</td>
+                    <td className="px-4 py-3">{formatTrackedTime(row.timeTrackedSeconds)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Panel>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Panel title="Interactions">
+          {interactions.rows.length === 0 ? (
+            <EmptyPanel message="No interactions were returned for these filters." />
+          ) : (
+            <div>
+              <p className="px-4 pt-3 text-sm text-slate-600">
+                <span className="font-semibold text-[#69BE28]">{interactions.correct} correct</span>
+                <span className="mx-2 text-slate-300">·</span>
+                <span className="font-semibold text-[#D32F2F]">{interactions.incorrect} incorrect</span>
+              </p>
+              <div className="overflow-x-auto max-h-64">
+                <table className="w-full text-sm">
+                  <thead className="text-left text-slate-600">
+                    <tr>
+                      <th className="px-4 py-3 font-medium">Question</th>
+                      <th className="px-4 py-3 font-medium">Result</th>
+                      <th className="px-4 py-3 font-medium">Weighting</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {interactions.rows.map((row) => (
+                      <tr key={row.id} className="border-t border-slate-100">
+                        <td className="px-4 py-3">{row.question}</td>
+                        <td className="px-4 py-3">{row.result || "—"}</td>
+                        <td className="px-4 py-3">{row.weighting == null ? "—" : row.weighting}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </Panel>
+
+        <Panel title="Launch history">
+          {launches.count === 0 ? (
+            <EmptyPanel message="No launch history was returned for these filters." />
+          ) : (
+            <div className="p-4 grid grid-cols-2 gap-3">
+              <div className="rounded-lg bg-slate-50 p-3">
+                <p className="text-xs text-slate-500">Launches</p>
+                <p className="text-2xl font-semibold text-[#0056A6]">{launches.count}</p>
+              </div>
+              <div className="rounded-lg bg-slate-50 p-3">
+                <p className="text-xs text-slate-500">Session time</p>
+                <p className="text-2xl font-semibold text-[#69BE28]">{launches.sessionHours} h</p>
+              </div>
+            </div>
+          )}
+        </Panel>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Panel title="Objectives">
+          {objectives.length === 0 ? (
+            <EmptyPanel message="No objectives were returned for these filters." />
+          ) : (
+            <div className="overflow-x-auto max-h-64">
+              <table className="w-full text-sm">
+                <thead className="text-left text-slate-600">
+                  <tr>
+                    <th className="px-4 py-3 font-medium">Trainee</th>
+                    <th className="px-4 py-3 font-medium">Objective</th>
+                    <th className="px-4 py-3 font-medium">Success</th>
+                    <th className="px-4 py-3 font-medium">Completion</th>
+                    <th className="px-4 py-3 font-medium">Score</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {objectives.map((row) => (
+                    <tr key={row.id} className="border-t border-slate-100">
+                      <td className="px-4 py-3">{row.fullName}</td>
+                      <td className="px-4 py-3">{row.objectiveId}</td>
+                      <td className="px-4 py-3">{row.success || "—"}</td>
+                      <td className="px-4 py-3">{row.completion || "—"}</td>
+                      <td className="px-4 py-3">{formatScore(row.scorePercent)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Panel>
+
+        <Panel title="Learner comments">
+          {comments.length === 0 ? (
+            <EmptyPanel message="No learner comments were returned for these filters." />
+          ) : (
+            <ul className="divide-y divide-slate-100 max-h-64 overflow-auto">
+              {comments.map((row) => (
+                <li key={row.id} className="px-4 py-3 text-sm">
+                  <p className="font-medium">{row.fullName}</p>
+                  <p className="text-slate-600">{row.comment}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Panel>
+      </div>
+    </div>
+  );
+}
+
 function ActivityReportCharts({ report }: { report: ActivityReportData }) {
   const charts = activityReportChartData(report);
   const analytics = report.analytics;
@@ -51,8 +265,88 @@ function ActivityReportCharts({ report }: { report: ActivityReportData }) {
     ["Passed", analytics.funnel.passed],
   ] as const;
 
+  const scorm = analytics.scorm;
+  const completed = analytics.funnel.completed;
+  const notCompleted = Math.max(0, analytics.funnel.assigned - completed);
+  const donut = [
+    { name: "Completed", value: completed, fill: "#69BE28" },
+    { name: "Not completed", value: notCompleted, fill: "#0056A6" },
+  ].filter((item) => item.value > 0);
+  const bandData = [
+    { name: "Under 50", value: scorm?.scoreBands.under50 ?? 0, fill: "#D32F2F" },
+    { name: "50–79", value: scorm?.scoreBands.from50to79 ?? 0, fill: "#F5A623" },
+    { name: "80 or above", value: scorm?.scoreBands.from80 ?? 0, fill: "#69BE28" },
+  ];
+
   return (
     <div className="space-y-4">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+        <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
+          <h3 className="font-bold">Completion</h3>
+          <p className="text-3xl font-semibold text-[#0056A6] mt-1">{analytics.summary.completionRate}%</p>
+          <p className="text-xs text-slate-500 mb-2">{completed} completed of {analytics.funnel.assigned} assigned</p>
+          <div className="h-52">
+            {donut.length === 0 ? (
+              <p className="text-sm text-slate-500 pt-8 text-center">No assigned courses in this range.</p>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={donut} dataKey="value" nameKey="name" innerRadius={58} outerRadius={82} paddingAngle={2} stroke="none">
+                    {donut.map((entry) => (
+                      <Cell key={entry.name} fill={entry.fill} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </div>
+
+        <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
+          <h3 className="font-bold mb-4">Score bands</h3>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={bandData} margin={{ left: 0, right: 8, bottom: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#64748b" }} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "#64748b" }} />
+                <Tooltip formatter={(value) => [value, "Scores"]} />
+                <Bar dataKey="value" radius={[6, 6, 0, 0]} barSize={36}>
+                  {bandData.map((entry) => (
+                    <Cell key={entry.name} fill={entry.fill} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
+          <h3 className="font-bold mb-4">Learner journey</h3>
+          <div className="space-y-3">
+            {funnelSteps.map(([label, value], index) => (
+              <div key={label}>
+                <div className="flex justify-between text-sm mb-1">
+                  <span>{label}</span>
+                  <span className="font-medium">{value}</span>
+                </div>
+                <div className="h-3 rounded-full bg-slate-100 overflow-hidden">
+                  <div
+                    className="h-full rounded-full"
+                    style={{
+                      width: `${Math.min(100, (value / funnelMax) * 100)}%`,
+                      background: CHART_COLORS[index % CHART_COLORS.length],
+                    }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
         <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
           <h3 className="font-bold mb-4">Performance by {groupAxis}</h3>
@@ -107,31 +401,7 @@ function ActivityReportCharts({ report }: { report: ActivityReportData }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
-          <h3 className="font-bold mb-4">Learner journey</h3>
-          <div className="space-y-3">
-            {funnelSteps.map(([label, value], index) => (
-              <div key={label}>
-                <div className="flex justify-between text-sm mb-1">
-                  <span>{label}</span>
-                  <span className="font-medium">{value}</span>
-                </div>
-                <div className="h-3 rounded-full bg-slate-100 overflow-hidden">
-                  <div
-                    className="h-full rounded-full"
-                    style={{
-                      width: `${Math.min(100, (value / funnelMax) * 100)}%`,
-                      background: CHART_COLORS[index % CHART_COLORS.length],
-                    }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
           <div className="px-4 py-3 border-b bg-slate-50">
             <h3 className="font-bold">At-risk trainees</h3>
           </div>
@@ -163,8 +433,9 @@ function ActivityReportCharts({ report }: { report: ActivityReportData }) {
               </table>
             </div>
           )}
-        </div>
       </div>
+
+      <ScormReportPanels scorm={scorm} />
 
       <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-x-auto">
         <div className="px-4 py-3 border-b bg-slate-50">
