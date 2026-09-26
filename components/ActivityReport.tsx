@@ -19,6 +19,9 @@ import {
   getActivityReport,
 } from "../api/activityReport";
 import { activityReportChartData } from "../utils/activityReportCharts";
+import { paginate } from "../utils/paginate";
+
+const TRAINEE_PAGE_SIZE = 20;
 
 const CHART_COLORS = ["#0056A6", "#69BE28", "#F5A623", "#D32F2F"];
 
@@ -107,6 +110,7 @@ export const ActivityReport: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [traineePage, setTraineePage] = useState(1);
 
   const filters = (): ActivityReportFilters => ({
     batchId: batchId === "all" ? undefined : batchId,
@@ -116,6 +120,7 @@ export const ActivityReport: React.FC = () => {
   });
 
   const loadReport = async (nextFilters = filters()) => {
+    setTraineePage(1);
     setLoading(true);
     setError(null);
     try {
@@ -155,6 +160,14 @@ export const ActivityReport: React.FC = () => {
       setDownloading(false);
     }
   };
+
+  const traineePages = paginate(report?.trainees ?? [], traineePage, TRAINEE_PAGE_SIZE);
+
+  useEffect(() => {
+    if (traineePage !== traineePages.page) {
+      setTraineePage(traineePages.page);
+    }
+  }, [traineePage, traineePages.page]);
 
   const totals = report?.totals;
 
@@ -303,8 +316,9 @@ export const ActivityReport: React.FC = () => {
           </div>
 
           <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-x-auto">
-            <div className="px-4 py-3 border-b bg-slate-50">
+            <div className="px-4 py-3 border-b bg-slate-50 flex items-center justify-between gap-3">
               <h3 className="font-bold">Trainees</h3>
+              <span className="text-sm text-slate-600">{report.trainees.length} trainees</span>
             </div>
             <table className="w-full text-sm">
               <thead className="text-left text-slate-600">
@@ -328,7 +342,7 @@ export const ActivityReport: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {report.trainees.map((trainee) => (
+                {traineePages.items.map((trainee) => (
                   <tr key={trainee.id} className="border-t border-slate-100">
                     <td className="px-4 py-3">
                       <p className="font-medium text-slate-900">{trainee.fullName}</p>
@@ -353,6 +367,34 @@ export const ActivityReport: React.FC = () => {
                 ))}
               </tbody>
             </table>
+            <div className="flex flex-col gap-3 border-t border-slate-200 px-4 py-3 text-sm md:flex-row md:items-center md:justify-between">
+              <p className="text-slate-600">
+                Showing {traineePages.from}–{traineePages.to} of {traineePages.total}
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setTraineePage((page) => Math.max(page - 1, 1))}
+                  disabled={traineePages.page === 1}
+                  className="rounded border border-slate-300 px-3 py-1.5 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Previous
+                </button>
+                <span className="min-w-24 text-center text-slate-600">
+                  Page {traineePages.page} / {traineePages.totalPages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setTraineePage((page) => Math.min(page + 1, traineePages.totalPages))
+                  }
+                  disabled={traineePages.page === traineePages.totalPages}
+                  className="rounded border border-slate-300 px-3 py-1.5 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
           </div>
         </>
       )}
