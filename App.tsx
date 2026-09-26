@@ -9,6 +9,7 @@ import {
   Menu,
   X,
   ClipboardList,
+  FileBarChart,
 } from "lucide-react";
 
 import { Dashboard } from "./components/Dashboard";
@@ -21,6 +22,7 @@ import { Login } from "./components/Login";
 import { getAccessToken, clearAuth } from "./utils/auth";
 import { fetchWithAuth, getTokenExpiryMs } from "./utils/fetchWithAuth";
 import { FieldTasks } from "./components/FieldTasks";
+import { ActivityReport } from "./components/ActivityReport";
 
 enum View {
   DASHBOARD,
@@ -29,6 +31,7 @@ enum View {
   PROGRESS,
   CERTIFICATES,
   FIELD_TASKS,
+  ACTIVITY_REPORT,
 }
 
 const App: React.FC = () => {
@@ -471,6 +474,11 @@ const App: React.FC = () => {
               label="Progress Tracking"
             />
             <NavItem
+              view={View.ACTIVITY_REPORT}
+              icon={<FileBarChart size={20} />}
+              label="Activity Report"
+            />
+            <NavItem
               view={View.CERTIFICATES}
               icon={<Award size={20} />}
               label="Certificates"
@@ -507,6 +515,7 @@ const App: React.FC = () => {
               {currentView === View.ASSIGNMENTS && "Assign Courses"}
               {currentView === View.FIELD_TASKS && "Field Tasks"}
               {currentView === View.PROGRESS && "Progress Reports"}
+              {currentView === View.ACTIVITY_REPORT && "Activity Report"}
               {currentView === View.CERTIFICATES && "Certificates"}
             </h2>
           </div>
@@ -538,6 +547,7 @@ const App: React.FC = () => {
                 progress={progress}
               />
             )}
+            {currentView === View.ACTIVITY_REPORT && <ActivityReport />}
             {currentView === View.CERTIFICATES && (
               <CertificateManagement
                 users={users}

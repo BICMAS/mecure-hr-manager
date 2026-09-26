@@ -1,0 +1,276 @@
+import React, { useEffect, useState } from "react";
+import { Download } from "lucide-react";
+import { Department, formatDepartmentLabel } from "../types";
+import { listBatches, LearnerBatch } from "../api/batches";
+import {
+  ActivityReport as ActivityReportData,
+  ActivityReportFilters,
+  downloadActivityReportCsv,
+  getActivityReport,
+} from "../api/activityReport";
+
+function formatScore(value: number | null) {
+  return value == null ? "—" : `${value}%`;
+}
+
+export const ActivityReport: React.FC = () => {
+  const [batches, setBatches] = useState<LearnerBatch[]>([]);
+  const [batchId, setBatchId] = useState("all");
+  const [department, setDepartment] = useState("all");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [report, setReport] = useState<ActivityReportData | null>(null);
+  const [appliedFilters, setAppliedFilters] = useState<ActivityReportFilters>({});
+  const [loading, setLoading] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const filters = (): ActivityReportFilters => ({
+    batchId: batchId === "all" ? undefined : batchId,
+    department: department === "all" ? undefined : department,
+    from: from || undefined,
+    to: to || undefined,
+  });
+
+  const loadReport = async (nextFilters = filters()) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await getActivityReport(nextFilters);
+      setAppliedFilters(nextFilters);
+      setReport(data);
+    } catch (err: unknown) {
+      setReport(null);
+      setError(err instanceof Error ? err.message : "Failed to load the activity report");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        setBatches(await listBatches());
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : "Failed to load batches");
+      }
+      await loadReport({ });
+    };
+    load();
+    // Initial report uses the default filters.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleDownload = async () => {
+    setDownloading(true);
+    setError(null);
+    try {
+      await downloadActivityReportCsv(appliedFilters);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to download the activity report");
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const totals = report?.totals;
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
+          <label className="text-sm">
+            <span className="block mb-1 text-slate-600">Batch</span>
+            <select
+              className="w-full border border-slate-300 rounded px-3 py-2 bg-white"
+              value={batchId}
+              onChange={(event) => setBatchId(event.target.value)}
+            >
+              <option value="all">All batches</option>
+              <option value="unassigned">Unassigned</option>
+              {batches.map((batch) => (
+                <option key={batch.id} value={batch.id}>{batch.name}</option>
+              ))}
+            </select>
+          </label>
+          <label className="text-sm">
+            <span className="block mb-1 text-slate-600">Department</span>
+            <select
+              className="w-full border border-slate-300 rounded px-3 py-2 bg-white"
+              value={department}
+              onChange={(event) => setDepartment(event.target.value)}
+            >
+              <option value="all">All departments</option>
+              {Object.values(Department).map((value) => (
+                <option key={value} value={value}>{formatDepartmentLabel(value)}</option>
+              ))}
+            </select>
+          </label>
+          <label className="text-sm">
+            <span className="block mb-1 text-slate-600">From</span>
+            <input
+              type="date"
+              className="w-full border border-slate-300 rounded px-3 py-2"
+              value={from}
+              onChange={(event) => setFrom(event.target.value)}
+            />
+          </label>
+          <label className="text-sm">
+            <span className="block mb-1 text-slate-600">To</span>
+            <input
+              type="date"
+              className="w-full border border-slate-300 rounded px-3 py-2"
+              value={to}
+              onChange={(event) => setTo(event.target.value)}
+            />
+          </label>
+          <div className="flex items-end gap-2">
+            <button
+              type="button"
+              onClick={() => loadReport()}
+              disabled={loading}
+              className="flex-1 py-2 bg-brand-primary text-white rounded-lg font-medium hover:bg-brand-primary-dark disabled:bg-slate-300"
+            >
+              {loading ? "Loading…" : "Apply"}
+            </button>
+            <button
+              type="button"
+              onClick={handleDownload}
+              disabled={downloading || loading || !report || report.trainees.length === 0}
+              className="px-3 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              aria-label="Download CSV"
+            >
+              <Download className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+        <p className="text-xs text-slate-500 mt-3">
+          The date range limits which activity is counted. Trainees stay in the report when they match the batch and department.
+        </p>
+      </div>
+
+      {error && <p className="text-sm text-red-600">{error}</p>}
+
+      {report?.message && (
+        <p className="bg-white border border-slate-200 rounded-lg p-6 text-sm text-slate-500 text-center">
+          {report.message}
+        </p>
+      )}
+
+      {totals && report && report.trainees.length > 0 && (
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-3">
+            {[
+              ["Trainees", totals.trainees],
+              ["Assigned courses", totals.assignedCourses],
+              ["Average progress", `${totals.averageProgress}%`],
+              ["Average score", formatScore(totals.averageScore)],
+              ["Learning hours", totals.learningHours],
+              ["Overdue", totals.overdueCourses],
+              ["Module progress", `${totals.moduleProgressCompleted}/${totals.moduleProgressTracked}`],
+              ["SCORM attempts", totals.scormAttempts],
+              ["Certificates", totals.certificates],
+              ["Quiz attempts", totals.quizAttempts],
+              ["Field tasks", totals.fieldTasks],
+              ["Points", totals.points],
+            ].map(([label, value]) => (
+              <div key={String(label)} className="bg-white border border-slate-200 rounded-lg p-3">
+                <p className="text-xs text-slate-500">{label}</p>
+                <p className="text-lg font-semibold text-slate-900">{value}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-x-auto">
+            <div className="px-4 py-3 border-b bg-slate-50">
+              <h3 className="font-bold">
+                {report.breakdownBy === "department" ? "By department" : "By batch"}
+              </h3>
+            </div>
+            <table className="w-full text-sm">
+              <thead className="text-left text-slate-600">
+                <tr>
+                  <th className="px-4 py-3 font-medium">{report.breakdownBy === "department" ? "Department" : "Batch"}</th>
+                  <th className="px-4 py-3 font-medium">Trainees</th>
+                  <th className="px-4 py-3 font-medium">Assigned</th>
+                  <th className="px-4 py-3 font-medium">Progress</th>
+                  <th className="px-4 py-3 font-medium">Overdue</th>
+                  <th className="px-4 py-3 font-medium">Certificates</th>
+                  <th className="px-4 py-3 font-medium">Points</th>
+                </tr>
+              </thead>
+              <tbody>
+                {report.breakdown.map((row) => (
+                  <tr key={row.label} className="border-t border-slate-100">
+                    <td className="px-4 py-3 font-medium">
+                      {report.breakdownBy === "department" ? formatDepartmentLabel(row.label) : row.label}
+                    </td>
+                    <td className="px-4 py-3">{row.trainees}</td>
+                    <td className="px-4 py-3">{row.assignedCourses}</td>
+                    <td className="px-4 py-3">{row.averageProgress}%</td>
+                    <td className="px-4 py-3">{row.overdueCourses}</td>
+                    <td className="px-4 py-3">{row.certificates}</td>
+                    <td className="px-4 py-3">{row.points}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-x-auto">
+            <div className="px-4 py-3 border-b bg-slate-50">
+              <h3 className="font-bold">Trainees</h3>
+            </div>
+            <table className="w-full text-sm">
+              <thead className="text-left text-slate-600">
+                <tr>
+                  <th className="px-4 py-3 font-medium">Trainee</th>
+                  <th className="px-4 py-3 font-medium">Batch</th>
+                  <th className="px-4 py-3 font-medium">Department</th>
+                  <th className="px-4 py-3 font-medium">Assigned</th>
+                  <th className="px-4 py-3 font-medium">Progress</th>
+                  <th className="px-4 py-3 font-medium">Score</th>
+                  <th className="px-4 py-3 font-medium">Hours</th>
+                  <th className="px-4 py-3 font-medium">Overdue</th>
+                  <th className="px-4 py-3 font-medium">Modules</th>
+                  <th className="px-4 py-3 font-medium">SCORM</th>
+                  <th className="px-4 py-3 font-medium">Certificates</th>
+                  <th className="px-4 py-3 font-medium">Quizzes</th>
+                  <th className="px-4 py-3 font-medium">Field tasks</th>
+                  <th className="px-4 py-3 font-medium">Points</th>
+                  <th className="px-4 py-3 font-medium">Awarded</th>
+                  <th className="px-4 py-3 font-medium">Courses</th>
+                </tr>
+              </thead>
+              <tbody>
+                {report.trainees.map((trainee) => (
+                  <tr key={trainee.id} className="border-t border-slate-100">
+                    <td className="px-4 py-3">
+                      <p className="font-medium text-slate-900">{trainee.fullName}</p>
+                      <p className="text-xs text-slate-500">{trainee.email}</p>
+                    </td>
+                    <td className="px-4 py-3">{trainee.batch}</td>
+                    <td className="px-4 py-3">{formatDepartmentLabel(trainee.department)}</td>
+                    <td className="px-4 py-3">{trainee.assignedCourses}</td>
+                    <td className="px-4 py-3">{trainee.averageProgress}%</td>
+                    <td className="px-4 py-3">{formatScore(trainee.averageScore)}</td>
+                    <td className="px-4 py-3">{trainee.learningHours}</td>
+                    <td className="px-4 py-3">{trainee.overdueCourses}</td>
+                    <td className="px-4 py-3">{trainee.moduleProgress}</td>
+                    <td className="px-4 py-3">{trainee.scormAttempts}</td>
+                    <td className="px-4 py-3">{trainee.certificates}</td>
+                    <td className="px-4 py-3">{trainee.quizAttempts}</td>
+                    <td className="px-4 py-3">{trainee.fieldTasks}</td>
+                    <td className="px-4 py-3">{trainee.points}</td>
+                    <td className="px-4 py-3">{trainee.pointsAwarded}</td>
+                    <td className="px-4 py-3 text-slate-600">{trainee.courses || "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
