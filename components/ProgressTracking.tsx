@@ -39,7 +39,8 @@ export const ProgressTracking: React.FC<ProgressTrackingProps> = ({ users, cours
 
   const normalizeStatus = (status: string): CourseStatus => {
     const normalized = status?.toLowerCase?.().trim() ?? "";
-    if (normalized === "completed") return CourseStatus.COMPLETED;
+    if (normalized === "completed" || normalized === "passed") return CourseStatus.COMPLETED;
+    if (normalized === "failed") return "Failed" as CourseStatus;
     if (normalized === "in_progress" || normalized === "in progress") {
       return CourseStatus.IN_PROGRESS;
     }
@@ -52,7 +53,8 @@ export const ProgressTracking: React.FC<ProgressTrackingProps> = ({ users, cours
 
   const getProgressPercent = (row: any, status: string) => {
     const direct = Number(
-      row.progressPercent ??
+      row.completionPercentage ??
+        row.progressPercent ??
         row.progress_percentage ??
         row.completionPercent ??
         row.completion_percentage ??
@@ -78,7 +80,7 @@ export const ProgressTracking: React.FC<ProgressTrackingProps> = ({ users, cours
     }
 
     const normalizedStatus = status.toLowerCase();
-    if (normalizedStatus === "completed") return 100;
+    if (normalizedStatus === "completed" || normalizedStatus === "passed") return 100;
     return 0;
   };
 
@@ -105,14 +107,14 @@ export const ProgressTracking: React.FC<ProgressTrackingProps> = ({ users, cours
       row,
       row.status ?? row.courseStatus ?? row.trackingStatus ?? "Not Started",
     ),
-    score: row.score ?? undefined,
+    score: row.score ?? row.scorePercent ?? undefined,
     attempts: row.attempts ?? 0,
     assignedDate: row.assignedDate ?? "",
     dueDate: row.dueDate ?? "",
     completedDate: row.completedDate ?? undefined,
     syncStatus: SyncStatus.PENDING,
     userName: row.userName ?? row.learnerName ?? row.user?.fullName ?? row.user?.name,
-    userDept: row.userDept ?? row.department ?? row.user?.department,
+    userDept: row.userDept ?? row.learnerDepartment ?? row.department ?? row.user?.department,
     courseTitle:
       row.courseTitle ??
       row.course_title ??
@@ -297,9 +299,14 @@ export const ProgressTracking: React.FC<ProgressTrackingProps> = ({ users, cours
       normalizedRows.forEach((normalized: LearnerProgress) => {
         const key = `${normalized.userId || "unknown-user"}::${normalized.courseId || normalized.courseTitle || "unknown-course"}`;
         const existing = dedupedMap.get(key);
+        const nextProgress = normalized.progressPercent ?? 0;
+        const existingProgress = existing?.progressPercent ?? 0;
+        const nextHasScore = normalized.score != null;
+        const existingHasScore = existing?.score != null;
         if (
-          !existing ||
-          (normalized.progressPercent ?? 0) >= (existing.progressPercent ?? 0)
+          !existing
+          || nextProgress > existingProgress
+          || (nextProgress === existingProgress && nextHasScore && !existingHasScore)
         ) {
           dedupedMap.set(key, normalized);
         }

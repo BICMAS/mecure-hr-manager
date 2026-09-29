@@ -12,6 +12,7 @@ import {
 } from "../api/courses";
 import {
   getCourseAssignees,
+  updateAssignmentDueDate,
   type CourseAssignee,
 } from "../api/assignments";
 import { listBatches, type LearnerBatch } from "../api/batches";
@@ -76,6 +77,9 @@ export const CourseAssignment: React.FC<CourseAssignmentProps> = ({
   const [assigneesLoading, setAssigneesLoading] = useState(false);
   const [assigneesError, setAssigneesError] = useState<string | null>(null);
   const [assigneePage, setAssigneePage] = useState(1);
+  const [dueDateDrafts, setDueDateDrafts] = useState<Record<string, string>>({});
+  const [savingDueDateId, setSavingDueDateId] = useState<string | null>(null);
+  const [dueDateError, setDueDateError] = useState<string | null>(null);
 
   const loadAssignees = async (courseId: string) => {
     setAssigneePage(1);
@@ -88,7 +92,13 @@ export const CourseAssignment: React.FC<CourseAssignmentProps> = ({
       setAssigneesLoading(true);
       setAssigneesError(null);
       const result = await getCourseAssignees(courseId);
-      setAssignees(result.assignees ?? []);
+      const nextAssignees = result.assignees ?? [];
+      setAssignees(nextAssignees);
+      setDueDateDrafts(
+        Object.fromEntries(
+          nextAssignees.map((row) => [row.assignmentId, toDateInputValue(row.dueDate)]),
+        ),
+      );
     } catch (err: unknown) {
       setAssignees([]);
       setAssigneesError(
@@ -114,6 +124,49 @@ export const CourseAssignment: React.FC<CourseAssignmentProps> = ({
     if (normalized === "FAILED") return "Failed";
     if (normalized === "NOT_STARTED") return "Not started";
     return status || "Not started";
+  };
+
+  const toDateInputValue = (value?: string | null) => {
+    if (!value) return "";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    return date.toISOString().slice(0, 10);
+  };
+
+  const handleDueDateSave = async (row: CourseAssignee) => {
+    const draft = dueDateDrafts[row.assignmentId] ?? "";
+    if (!draft) {
+      setDueDateError("Choose a due date before saving.");
+      return;
+    }
+
+    try {
+      setSavingDueDateId(row.assignmentId);
+      setDueDateError(null);
+      const result = await updateAssignmentDueDate(
+        row.assignmentId,
+        new Date(draft).toISOString(),
+      );
+      setAssignees((current) =>
+        current.map((item) =>
+          item.assignmentId === row.assignmentId
+            ? { ...item, dueDate: result.dueDate }
+            : item,
+        ),
+      );
+      setDueDateDrafts((current) => ({
+        ...current,
+        [row.assignmentId]: toDateInputValue(result.dueDate),
+      }));
+      setToast(`Due date updated for ${row.fullName}.`);
+      setTimeout(() => setToast(null), 3000);
+    } catch (err: unknown) {
+      setDueDateError(
+        err instanceof Error ? err.message : "Failed to update due date",
+      );
+    } finally {
+      setSavingDueDateId(null);
+    }
   };
 
   const formatDate = (value?: string | null) => {
@@ -627,6 +680,9 @@ useEffect(() => {
           {assigneesError && (
             <p className="p-4 text-sm text-red-600">{assigneesError}</p>
           )}
+          {dueDateError && (
+            <p className="px-4 pt-3 text-sm text-red-600">{dueDateError}</p>
+          )}
 
           {!assigneesLoading && !assigneesError && assignees.length === 0 && (
             <p className="p-6 text-sm text-slate-500 text-center">
@@ -661,7 +717,33 @@ useEffect(() => {
                         {formatDate(row.assignedAt)}
                       </td>
                       <td className="px-4 py-3 text-slate-600">
-                        {formatDate(row.dueDate)}
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="date"
+                            aria-label={`Due date for ${row.fullName}`}
+                            value={dueDateDrafts[row.assignmentId] ?? toDateInputValue(row.dueDate)}
+                            onChange={(event) =>
+                              setDueDateDrafts((current) => ({
+                                ...current,
+                                [row.assignmentId]: event.target.value,
+                              }))
+                            }
+                            className="rounded border border-slate-300 px-2 py-1 text-sm"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleDueDateSave(row)}
+                            disabled={
+                              savingDueDateId === row.assignmentId
+                              || !(dueDateDrafts[row.assignmentId] ?? "")
+                              || (dueDateDrafts[row.assignmentId] ?? "")
+                                === toDateInputValue(row.dueDate)
+                            }
+                            className="rounded border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {savingDueDateId === row.assignmentId ? "Saving…" : "Save"}
+                          </button>
+                        </div>
                       </td>
                       <td className="px-4 py-3">
                         <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">

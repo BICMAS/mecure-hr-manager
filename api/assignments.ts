@@ -47,3 +47,31 @@ export async function getCourseAssignees(
 
   return body as CourseAssigneesResponse;
 }
+
+export async function updateAssignmentDueDate(
+  assignmentId: string,
+  dueDate: string,
+): Promise<{ assignmentId: string; dueDate: string }> {
+  const token = getAccessToken();
+  if (!token) throw new Error("No access token");
+
+  const res = await fetch(
+    `${API_BASE}/assignments/${encodeURIComponent(assignmentId)}/due-date`,
+    {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ dueDate }),
+    },
+  );
+
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(body?.error || "Failed to update due date");
+  }
+
+  return body as { assignmentId: string; dueDate: string };
+}
