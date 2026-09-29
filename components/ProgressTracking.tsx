@@ -10,6 +10,25 @@ import { getApiV1BaseUrl } from '@/lib/apiConfig';
 
 const API_BASE = getApiV1BaseUrl();
 
+const TRACKING_STATUS_OPTIONS = [
+  "COMPLETED",
+  "INCOMPLETE",
+  "IN_PROGRESS",
+  "UNKNOWN",
+  "NOT_STARTED",
+  "FAILED",
+];
+
+function formatQuizScore(score: number | undefined, quizResult?: string | null) {
+  if (score == null || Number.isNaN(Number(score))) return "—";
+  return quizResult ? `${score}% · ${quizResult}` : `${score}%`;
+}
+
+function formatLearningHours(hours: number | null | undefined) {
+  if (hours == null || Number.isNaN(Number(hours))) return "—";
+  return `${Number(hours)} h`;
+}
+
 interface ProgressTrackingProps {
   users: User[];
   courses: Course[];
@@ -37,18 +56,31 @@ export const ProgressTracking: React.FC<ProgressTrackingProps> = ({ users, cours
       .trim()
       .toLowerCase();
 
-  const normalizeStatus = (status: string): CourseStatus => {
-    const normalized = status?.toLowerCase?.().trim() ?? "";
-    if (normalized === "completed" || normalized === "passed") return CourseStatus.COMPLETED;
-    if (normalized === "failed") return "Failed" as CourseStatus;
-    if (normalized === "in_progress" || normalized === "in progress") {
-      return CourseStatus.IN_PROGRESS;
+  const normalizeStatus = (status: string): string => {
+    const normalized = String(status ?? "")
+      .trim()
+      .toLowerCase()
+      .replace(/[\s-]+/g, "_");
+    switch (normalized) {
+      case "completed":
+        return "COMPLETED";
+      case "incomplete":
+        return "INCOMPLETE";
+      case "in_progress":
+        return "IN_PROGRESS";
+      case "unknown":
+        return "UNKNOWN";
+      case "not_started":
+        return "NOT_STARTED";
+      case "failed":
+        return "FAILED";
+      case "passed":
+        return "PASSED";
+      case "overdue":
+        return "OVERDUE";
+      default:
+        return "NOT_STARTED";
     }
-    if (normalized === "overdue") return CourseStatus.OVERDUE;
-    if (normalized === "not_started" || normalized === "not started") {
-      return CourseStatus.NOT_STARTED;
-    }
-    return CourseStatus.NOT_STARTED;
   };
 
   const getProgressPercent = (row: any, status: string) => {
@@ -64,7 +96,7 @@ export const ProgressTracking: React.FC<ProgressTrackingProps> = ({ users, cours
         row.stats?.progressPercent,
     );
 
-    if (Number.isFinite(direct) && direct > 0) return Math.min(direct, 100);
+    if (Number.isFinite(direct) && direct >= 0) return Math.min(direct, 100);
 
     const completed = Number(
       row.completedLessons ??
@@ -108,6 +140,8 @@ export const ProgressTracking: React.FC<ProgressTrackingProps> = ({ users, cours
       row.status ?? row.courseStatus ?? row.trackingStatus ?? "Not Started",
     ),
     score: row.score ?? row.scorePercent ?? undefined,
+    quizResult: row.quizResult ?? row.registrationSuccess ?? null,
+    learningHours: row.learningHours ?? null,
     attempts: row.attempts ?? 0,
     assignedDate: row.assignedDate ?? "",
     dueDate: row.dueDate ?? "",
@@ -415,7 +449,8 @@ export const ProgressTracking: React.FC<ProgressTrackingProps> = ({ users, cours
       "Course",
       "Status",
       "Progress",
-      "Incomplete",
+      "Quiz Score",
+      "Time",
       "Due Date",
     ];
 
@@ -423,9 +458,10 @@ export const ProgressTracking: React.FC<ProgressTrackingProps> = ({ users, cours
       item.userName,
       item.userDept,
       item.courseTitle,
-      item.status === CourseStatus.NOT_STARTED ? "NOT_STARTED" : item.status,
+      item.status,
       `${item.progressPercent}%`,
-      `${100 - item.progressPercent}%`,
+      formatQuizScore(item.score, item.quizResult),
+      formatLearningHours(item.learningHours),
       item.dueDate || "",
     ]);
 
@@ -452,9 +488,10 @@ export const ProgressTracking: React.FC<ProgressTrackingProps> = ({ users, cours
             <td>${item.userName ?? ""}</td>
             <td>${item.userDept ?? ""}</td>
             <td>${item.courseTitle ?? ""}</td>
-            <td>${item.status === CourseStatus.NOT_STARTED ? "NOT_STARTED" : item.status}</td>
+            <td>${item.status}</td>
             <td>${item.progressPercent}%</td>
-            <td>${100 - item.progressPercent}%</td>
+            <td>${formatQuizScore(item.score, item.quizResult)}</td>
+            <td>${formatLearningHours(item.learningHours)}</td>
             <td>${item.dueDate ?? ""}</td>
           </tr>
         `,
@@ -483,7 +520,8 @@ export const ProgressTracking: React.FC<ProgressTrackingProps> = ({ users, cours
                 <th>Course</th>
                 <th>Status</th>
                 <th>Progress</th>
-                <th>Incomplete</th>
+                <th>Quiz Score</th>
+                <th>Time</th>
                 <th>Due Date</th>
               </tr>
             </thead>
@@ -598,12 +636,22 @@ export const ProgressTracking: React.FC<ProgressTrackingProps> = ({ users, cours
     console.log("Progress tracking merged/filtered data:", data);
   }, [users, courses, progress, trackingRows]);
 
-  const getStatusColor = (status: CourseStatus) => {
+  const getStatusColor = (status: string) => {
     switch (status) {
-      case CourseStatus.COMPLETED: return 'bg-green-100 text-green-700';
-      case CourseStatus.IN_PROGRESS: return 'bg-brand-primary/10 text-brand-primary';
-      case CourseStatus.OVERDUE: return 'bg-red-100 text-red-700';
-      default: return 'bg-slate-100 text-slate-600';
+      case "COMPLETED":
+      case CourseStatus.COMPLETED:
+        return "bg-green-100 text-green-700";
+      case "IN_PROGRESS":
+      case CourseStatus.IN_PROGRESS:
+        return "bg-brand-primary/10 text-brand-primary";
+      case "INCOMPLETE":
+        return "bg-amber-100 text-amber-700";
+      case "FAILED":
+      case "OVERDUE":
+      case CourseStatus.OVERDUE:
+        return "bg-red-100 text-red-700";
+      default:
+        return "bg-slate-100 text-slate-600";
     }
   };
 
@@ -644,10 +692,9 @@ export const ProgressTracking: React.FC<ProgressTrackingProps> = ({ users, cours
                 onChange={e => setFilterStatus(e.target.value)}
              >
                 <option value="All">All Statuses</option>
-                <option value={CourseStatus.COMPLETED}>{CourseStatus.COMPLETED}</option>
-                <option value={CourseStatus.IN_PROGRESS}>{CourseStatus.IN_PROGRESS}</option>
-                <option value={CourseStatus.NOT_STARTED}>{CourseStatus.NOT_STARTED}</option>
-                <option value={CourseStatus.OVERDUE}>{CourseStatus.OVERDUE}</option>
+                {TRACKING_STATUS_OPTIONS.map((status) => (
+                  <option key={status} value={status}>{status}</option>
+                ))}
              </select>
            </div>
            <div className="relative">
@@ -726,20 +773,21 @@ export const ProgressTracking: React.FC<ProgressTrackingProps> = ({ users, cours
                 <th className="px-6 py-3">Status</th>
                 <th className="px-6 py-3">Progress</th>
                 <th className="px-6 py-3">Quiz Score</th>
+                <th className="px-6 py-3">Time</th>
                 <th className="px-6 py-3">Due Date</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loadingTracking && (
                 <tr>
-                  <td colSpan={6} className="px-6 py-6 text-center text-sm text-slate-500">
+                  <td colSpan={7} className="px-6 py-6 text-center text-sm text-slate-500">
                     Loading progress data...
                   </td>
                 </tr>
               )}
               {!loadingTracking && data.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-6 py-6 text-center text-sm text-slate-500">
+                  <td colSpan={7} className="px-6 py-6 text-center text-sm text-slate-500">
                     No progress tracking data found.
                   </td>
                 </tr>
@@ -757,7 +805,7 @@ export const ProgressTracking: React.FC<ProgressTrackingProps> = ({ users, cours
                   <td className="px-6 py-3 text-slate-700">{item.courseTitle}</td>
                   <td className="px-6 py-3">
                     <span className={`inline-flex px-2 py-1 rounded text-xs font-semibold ${getStatusColor(item.status)}`}>
-                      {item.status === CourseStatus.NOT_STARTED ? "NOT_STARTED" : item.status}
+                      {item.status}
                     </span>
                   </td>
                   <td className="px-6 py-3">
@@ -765,20 +813,19 @@ export const ProgressTracking: React.FC<ProgressTrackingProps> = ({ users, cours
                         <div className="w-24 h-2 bg-slate-100 rounded-full overflow-hidden">
                             <div className="h-full bg-brand-primary" style={{ width: `${item.progressPercent}%` }}></div>
                         </div>
-                        <span className="text-xs text-slate-500">
-                          {item.progressPercent >= 100
-                            ? "100%"
-                            : `${item.progressPercent}% (${100 - item.progressPercent}% incomplete)`}
-                        </span>
+                        <span className="text-xs text-slate-500">{item.progressPercent}%</span>
                     </div>
                   </td>
                   <td className="px-6 py-3 text-slate-700">
                     {item.score != null ? (
-                      <span className="font-medium text-emerald-700">{item.score}%</span>
+                      <span className="font-medium text-emerald-700">
+                        {formatQuizScore(item.score, item.quizResult)}
+                      </span>
                     ) : (
                       <span className="text-slate-400">—</span>
                     )}
                   </td>
+                  <td className="px-6 py-3 text-slate-500">{formatLearningHours(item.learningHours)}</td>
                   <td className="px-6 py-3 text-slate-500">{item.dueDate}</td>
                 </tr>
               ))}

@@ -104,6 +104,7 @@ const App: React.FC = () => {
     progressPercent: (() => {
       const direct = Number(
         row.progressPercent ??
+          row.completionPercentage ??
           row.progress_percentage ??
           row.completionPercent ??
           row.completion_percentage ??
@@ -112,7 +113,7 @@ const App: React.FC = () => {
           row.metrics?.progressPercent ??
           row.stats?.progressPercent,
       );
-      if (Number.isFinite(direct) && direct > 0) return Math.min(direct, 100);
+      if (Number.isFinite(direct) && direct >= 0) return Math.min(direct, 100);
 
       const completed = Number(
         row.completedLessons ??
@@ -137,6 +138,8 @@ const App: React.FC = () => {
       return 0;
     })(),
     score: row.score ?? undefined,
+    quizResult: row.quizResult ?? row.registrationSuccess ?? null,
+    learningHours: row.learningHours ?? null,
     attempts: row.attempts ?? 0,
     assignedDate: row.assignedDate ?? "",
     dueDate: row.dueDate ?? "",

@@ -74,9 +74,11 @@ export interface LearnerProgress {
   id: string;
   userId: string;
   courseId: string;
-  status: CourseStatus;
+  status: string;
   progressPercent: number;
   score?: number;
+  quizResult?: string | null;
+  learningHours?: number | null;
   attempts: number;
   assignedDate: string;
   dueDate: string;
