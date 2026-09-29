@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { User, Course, LearnerProgress, CourseStatus, SyncStatus, Department, formatDepartmentLabel } from '../types';
-import { Search, Filter, RefreshCw } from 'lucide-react';
+import { Search, Filter, RefreshCw, ChevronDown } from 'lucide-react';
 import {
   getLearnerCourseTrackingById,
   getLearnersCourseTracking,
@@ -18,6 +18,10 @@ const TRACKING_STATUS_OPTIONS = [
   "NOT_STARTED",
   "FAILED",
 ];
+
+const FILTER_CONTROL =
+  "h-10 w-full min-w-0 truncate rounded-lg border border-slate-300 bg-white text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary";
+const FILTER_SELECT = `${FILTER_CONTROL} appearance-none pr-9`;
 
 function formatQuizScore(score: number | undefined, quizResult?: string | null) {
   if (score == null || Number.isNaN(Number(score))) return "—";
@@ -656,107 +660,124 @@ export const ProgressTracking: React.FC<ProgressTrackingProps> = ({ users, cours
   return (
     <div className="space-y-4">
       {/* Filters */}
-      <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm flex flex-col md:flex-row gap-4 justify-between items-center">
-        <div className="flex gap-4 w-full md:w-auto">
-           <div className="relative">
-             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4" />
-             <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Search learner or course..."
-                className="pl-9 pr-3 py-2 border border-slate-300 rounded text-sm focus:ring-brand-primary focus:outline-none bg-white"
-             />
-           </div>
-           <div className="relative">
-             <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4" />
-             <select 
-                className="pl-9 pr-4 py-2 border border-slate-300 rounded text-sm focus:ring-brand-primary focus:outline-none appearance-none bg-white"
-                value={filterDept}
-                onChange={e => setFilterDept(e.target.value)}
-             >
-                <option value="All">All Departments</option>
-                {Object.values(Department).map((d) => (
-                  <option key={d} value={d}>
-                    {formatDepartmentLabel(d)}
-                  </option>
-                ))}
-             </select>
-           </div>
-           <div className="relative">
-             <select 
-                className="px-4 py-2 border border-slate-300 rounded text-sm focus:ring-brand-primary focus:outline-none bg-white"
-                value={filterStatus}
-                onChange={e => setFilterStatus(e.target.value)}
-             >
-                <option value="All">All Statuses</option>
-                {TRACKING_STATUS_OPTIONS.map((status) => (
-                  <option key={status} value={status}>{status}</option>
-                ))}
-             </select>
-           </div>
-           <div className="relative">
-             <select
-                className="px-4 py-2 border border-slate-300 rounded text-sm focus:ring-brand-primary focus:outline-none bg-white"
-                value={sortBy}
-                onChange={e => setSortBy(e.target.value)}
-             >
-                <option value="learner-asc">Learner (A-Z)</option>
-                <option value="learner-desc">Learner (Z-A)</option>
-                <option value="course-asc">Course (A-Z)</option>
-                <option value="course-desc">Course (Z-A)</option>
-                <option value="progress-desc">Progress (High-Low)</option>
-                <option value="progress-asc">Progress (Low-High)</option>
-                <option value="status-asc">Status (A-Z)</option>
-                <option value="status-desc">Status (Z-A)</option>
-             </select>
-           </div>
-           <div className="relative">
-             <select
-                className="px-4 py-2 border border-slate-300 rounded text-sm focus:ring-brand-primary focus:outline-none bg-white"
-                value={selectedLearnerId}
-                onChange={async (e) => {
-                  const learnerId = e.target.value;
-                  setSelectedLearnerId(learnerId);
-                  if (learnerId === "All") {
-                    await loadTracking();
-                  } else {
-                    await loadTracking(learnerId);
-                  }
-                }}
-             >
-                <option value="All">All Learners</option>
-                {availableUsers.map((user) => (
-                  <option key={user.id} value={user.id}>
-                    {user.name}
-                  </option>
-                ))}
-             </select>
-           </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleExportCsv}
-            className="text-sm font-medium rounded border border-slate-300 px-3 py-2 text-slate-700 hover:bg-slate-50"
-          >
-            Export CSV
-          </button>
-          <button
-            onClick={handleExportPdf}
-            className="text-sm font-medium rounded border border-slate-300 px-3 py-2 text-slate-700 hover:bg-slate-50"
-          >
-            Export PDF
-          </button>
-          <button
-            onClick={() =>
-              selectedLearnerId === "All"
-                ? loadTracking()
-                : loadTracking(selectedLearnerId)
-            }
-            className="flex items-center gap-2 text-sm font-medium text-brand-primary hover:text-brand-primary-dark"
-          >
-              <RefreshCw className="w-4 h-4" /> Refresh Data
-          </button>
+      <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 md:gap-3">
+          <div className="relative min-w-[220px] flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search learner or course..."
+              aria-label="Search learners or courses"
+              className={`${FILTER_CONTROL} pl-9 pr-3`}
+            />
+          </div>
+
+          <div className="relative min-w-[10.5rem] flex-1 sm:flex-none sm:w-44">
+            <Filter className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <select
+              className={`${FILTER_SELECT} pl-9`}
+              value={filterDept}
+              onChange={(e) => setFilterDept(e.target.value)}
+              aria-label="Filter by department"
+            >
+              <option value="All">All Departments</option>
+              {Object.values(Department).map((d) => (
+                <option key={d} value={d}>
+                  {formatDepartmentLabel(d)}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          </div>
+
+          <div className="relative min-w-[9.5rem] flex-1 sm:flex-none sm:w-40">
+            <select
+              className={`${FILTER_SELECT} pl-3`}
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              aria-label="Filter by status"
+            >
+              <option value="All">All Statuses</option>
+              {TRACKING_STATUS_OPTIONS.map((status) => (
+                <option key={status} value={status}>{status}</option>
+              ))}
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          </div>
+
+          <div className="relative min-w-[9.5rem] flex-1 sm:flex-none sm:w-40">
+            <select
+              className={`${FILTER_SELECT} pl-3`}
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              aria-label="Sort progress rows"
+            >
+              <option value="learner-asc">Learner (A-Z)</option>
+              <option value="learner-desc">Learner (Z-A)</option>
+              <option value="course-asc">Course (A-Z)</option>
+              <option value="course-desc">Course (Z-A)</option>
+              <option value="progress-desc">Progress (High-Low)</option>
+              <option value="progress-asc">Progress (Low-High)</option>
+              <option value="status-asc">Status (A-Z)</option>
+              <option value="status-desc">Status (Z-A)</option>
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          </div>
+
+          <div className="relative min-w-[9.5rem] flex-1 sm:flex-none sm:w-44">
+            <select
+              className={`${FILTER_SELECT} pl-3`}
+              value={selectedLearnerId}
+              onChange={async (e) => {
+                const learnerId = e.target.value;
+                setSelectedLearnerId(learnerId);
+                if (learnerId === "All") {
+                  await loadTracking();
+                } else {
+                  await loadTracking(learnerId);
+                }
+              }}
+              aria-label="Filter by learner"
+            >
+              <option value="All">All Learners</option>
+              {availableUsers.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.name}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          </div>
+
+          <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={handleExportCsv}
+              className="h-10 rounded-lg border border-slate-300 px-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Export CSV
+            </button>
+            <button
+              type="button"
+              onClick={handleExportPdf}
+              className="h-10 rounded-lg border border-slate-300 px-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Export PDF
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                selectedLearnerId === "All"
+                  ? loadTracking()
+                  : loadTracking(selectedLearnerId)
+              }
+              className="flex h-10 items-center gap-2 rounded-lg px-2 text-sm font-medium text-brand-primary hover:text-brand-primary-dark"
+            >
+              <RefreshCw className="h-4 w-4" /> Refresh Data
+            </button>
+          </div>
         </div>
       </div>
 
