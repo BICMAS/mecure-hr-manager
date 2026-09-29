@@ -30,7 +30,14 @@ function formatQuizScore(score: number | undefined, quizResult?: string | null) 
 
 function formatLearningHours(hours: number | null | undefined) {
   if (hours == null || Number.isNaN(Number(hours))) return "—";
-  return `${Number(hours)} h`;
+  return `${Number(hours).toFixed(2)} h`;
+}
+
+function formatDueDate(value: string | Date | null | undefined) {
+  if (value == null || value === "") return "—";
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleDateString();
 }
 
 interface ProgressTrackingProps {
@@ -466,7 +473,7 @@ export const ProgressTracking: React.FC<ProgressTrackingProps> = ({ users, cours
       `${item.progressPercent}%`,
       formatQuizScore(item.score, item.quizResult),
       formatLearningHours(item.learningHours),
-      item.dueDate || "",
+      formatDueDate(item.dueDate),
     ]);
 
     const csv = [headers, ...rows]
@@ -496,7 +503,7 @@ export const ProgressTracking: React.FC<ProgressTrackingProps> = ({ users, cours
             <td>${item.progressPercent}%</td>
             <td>${formatQuizScore(item.score, item.quizResult)}</td>
             <td>${formatLearningHours(item.learningHours)}</td>
-            <td>${item.dueDate ?? ""}</td>
+            <td>${formatDueDate(item.dueDate)}</td>
           </tr>
         `,
       )
@@ -845,7 +852,7 @@ export const ProgressTracking: React.FC<ProgressTrackingProps> = ({ users, cours
                     )}
                   </td>
                   <td className="px-6 py-3 text-slate-500">{formatLearningHours(item.learningHours)}</td>
-                  <td className="px-6 py-3 text-slate-500">{item.dueDate}</td>
+                  <td className="px-6 py-3 text-slate-500">{formatDueDate(item.dueDate)}</td>
                 </tr>
               ))}
             </tbody>
