@@ -42,9 +42,9 @@ const COLORS = ["#0056A6", "#69BE28", "#F5A623", "#D32F2F", "#1A6BB8"];
 
 interface DashboardStats {
   totalLearners: number;
-  averageCompletion: number;
-  overdueCourses: number;
-  activeAssignments: number;
+  openAssignments: number;
+  overdueAssignments: number;
+  completedAssignments: number;
   topPerformers: User[];
   scoreLeaderboard?: {
     enabled: boolean;
@@ -399,8 +399,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ users = [] }) => {
 
     const context = JSON.stringify({
       totalLearners: stats.totalLearners,
-      overdueCourses: stats.overdueCourses,
-      averageCompletion: stats.averageCompletion,
+      openAssignments: stats.openAssignments,
+      overdueAssignments: stats.overdueAssignments,
+      completedAssignments: stats.completedAssignments,
       completionByDepartment: stats.completionByDepartment,
     });
 
@@ -531,26 +532,29 @@ export const Dashboard: React.FC<DashboardProps> = ({ users = [] }) => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           icon={<Users className="w-6 h-6 text-white" />}
-          title="Total Learners"
+          title="Total learners"
           value={stats.totalLearners}
           gradient="bg-gradient-to-br from-brand-primary to-brand-primary-dark"
         />
         <StatCard
-          icon={<CheckCircle className="w-6 h-6 text-white" />}
-          title="Avg. Completion"
-          value={`${stats.averageCompletion}%`}
+          icon={<BookOpen className="w-6 h-6 text-white" />}
+          title="Open assignments"
+          value={stats.openAssignments}
+          subtitle="One per learner per course"
           gradient="bg-gradient-to-br from-emerald-500 to-emerald-600"
         />
         <StatCard
           icon={<AlertCircle className="w-6 h-6 text-white" />}
-          title="Overdue Courses"
-          value={stats.overdueCourses}
+          title="Overdue assignments"
+          value={stats.overdueAssignments}
+          subtitle="Past the due date and not completed"
           gradient="bg-gradient-to-br from-rose-500 to-rose-600"
         />
         <StatCard
-          icon={<BookOpen className="w-6 h-6 text-white" />}
-          title="Active Assignments"
-          value={stats.activeAssignments}
+          icon={<CheckCircle className="w-6 h-6 text-white" />}
+          title="Completed assignments"
+          value={stats.completedAssignments}
+          subtitle="One per learner per course"
           gradient="bg-gradient-to-br from-violet-500 to-violet-600"
         />
       </div>
@@ -1076,11 +1080,13 @@ const StatCard = ({
   icon,
   title,
   value,
+  subtitle,
   gradient,
 }: {
   icon: React.ReactNode;
   title: string;
   value: string | number;
+  subtitle?: string;
   gradient: string;
 }) => (
   <div
@@ -1091,6 +1097,9 @@ const StatCard = ({
       <div>
         <p className="text-purple-100 text-sm font-medium mb-1">{title}</p>
         <h3 className="text-3xl font-bold">{value}</h3>
+        {subtitle && (
+          <p className="mt-2 text-sm text-white/80">{subtitle}</p>
+        )}
       </div>
       <div className="p-3 bg-white/20 rounded-xl backdrop-blur-sm">{icon}</div>
     </div>
