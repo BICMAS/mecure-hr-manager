@@ -620,12 +620,10 @@ export const ProgressTracking: React.FC<ProgressTrackingProps> = ({ users, cours
   }, [courses.length]);
 
   useEffect(() => {
-    if (progress.length) {
-      setTrackingRows(progress.map((row: any) => normalizeTrackingRow(row)));
-    } else {
-      loadTracking();
-    }
-  }, [progress.length]);
+    // Always load from the API so Progress Tracking gets every learner and
+    // the latest saved SCORM registrations, not a truncated shared snapshot.
+    loadTracking();
+  }, []);
 
   useEffect(() => {
     console.log("Progress tracking props response:", {
