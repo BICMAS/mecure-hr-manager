@@ -97,13 +97,19 @@ interface AnnouncementMeta {
 
 const ANNOUNCEMENTS_PAGE_SIZE = 5;
 
-const userName = getCurrentUserName();
+function greetingForHour(hour: number) {
+  if (hour >= 5 && hour < 12) return "Good Morning";
+  if (hour >= 12 && hour < 17) return "Good Afternoon";
+  return "Good Evening";
+}
 
 interface DashboardProps {
   users?: User[];
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({ users = [] }) => {
+  const userName = getCurrentUserName();
+  const greeting = greetingForHour(new Date().getHours());
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [insight, setInsight] = useState("");
@@ -515,7 +521,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ users = [] }) => {
       {/* Welcome Banner */}
       <div className="bg-brand-primary rounded-2xl p-8 text-white shadow-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold">Good Morning, {userName}</h1>
+          <h1 className="text-3xl font-bold">{greeting}, {userName}</h1>
           <p className="text-white/80 mt-1">
             Here is what's happening at MeCure Excellence Academy today.
           </p>

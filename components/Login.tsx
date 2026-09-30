@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Lock, Mail, ArrowRight, Eye, EyeOff, X, CheckCircle } from 'lucide-react';
 import { login } from '@/api/auth';
-import { saveAuth } from '@/utils/auth';
+import { saveAuth, saveCurrentUser } from '@/utils/auth';
 
 interface LoginProps {
   onLogin: (user: any) => void;
@@ -26,6 +26,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
      
       const data = await login(email, password);
       saveAuth(data.accessToken, data.refreshToken);
+      saveCurrentUser(data.user);
 
       onLogin(data.user);
 
